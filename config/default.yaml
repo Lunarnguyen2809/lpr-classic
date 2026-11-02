@@ -1,0 +1,57 @@
+seed: 42
+paths:
+  raw: data/raw
+  subset: data/ccpd_subset
+  annotations: data/annotations.csv
+  splits: data/splits.csv
+  vn: data/vn_custom/annotations.csv
+  char_labels: data/char_labels/char_boxes.csv
+  models: models
+  results: results
+data:
+  subsets: {base: 500, tilt: 40, blur: 40, db: 40, challenge: 40}
+  tune_ratio: 0.3
+preprocess:
+  resize_width: 800
+  clahe: {clip_limit: 2.0, tile: [8, 8]}
+  denoise: bilateral                       # none | gaussian | median | bilateral
+  gaussian: {ksize: 5}
+  median: {ksize: 5}
+  bilateral: {d: 11, sigma_color: 17, sigma_space: 17}
+localize:
+  sobel_ksize: 3
+  close_kernel: [17, 3]                    # rộng × cao, kernel nằm ngang
+  open_kernel: [3, 3]
+  aspect_range: [2.0, 6.0]                 # chốt lại sau khi B vẽ phân bố ngày 3
+  area_ratio_range: [0.002, 0.10]
+  min_fill_ratio: 0.5
+  min_edge_density: 0.15
+  max_angle: 30
+  top_k: 5
+hog_svm:
+  patch_size: [128, 32]                    # rộng × cao
+  orientations: 9
+  pixels_per_cell: [8, 8]
+  cells_per_block: [2, 2]
+  neg_per_pos: 3
+  C: 1.0
+  score_threshold: 0.0
+rectify:
+  plate_size: [220, 70]                    # tỉ lệ 440:140 mm của biển xanh Trung Quốc
+  quad_method: minarearect                 # minarearect | approxpoly
+binarize:
+  method: otsu                             # otsu | adaptive
+  adaptive: {block_size: 25, C: 7}
+segment:
+  method: cca                              # cca | projection
+  char_height_range: [0.4, 0.9]            # so với chiều cao biển
+  char_aspect_range: [0.15, 1.0]           # rộng / cao
+  min_area: 30
+  projection: {min_gap: 2, min_width: 4}
+  # Vị trí khuôn ký tự (mm, biển 440×140): rộng 45, cách 12, sau ký tự thứ 2 cách 34.
+  # Kiểm tra lại trên 5 ảnh thật ngày 6 rồi mới dùng chính thức.
+  char_template_mm: [[15.5, 60.5], [72.5, 117.5], [151.5, 196.5], [208.5, 253.5],
+                     [265.5, 310.5], [322.5, 367.5], [379.5, 424.5]]
+evaluate:
+  iou_threshold: 0.5
+  char_iou_threshold: 0.5
