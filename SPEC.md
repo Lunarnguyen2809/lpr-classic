@@ -402,12 +402,12 @@ preprocess:
   bilateral: {d: 11, sigma_color: 17, sigma_space: 17}
 localize:
   sobel_ksize: 3
-  close_kernel: [17, 3]                    # rộng × cao, kernel nằm ngang
+  close_kernel: [21, 5]                    # rộng × cao, kernel nằm ngang
   open_kernel: [3, 3]
   aspect_range: [2.0, 6.0]                 # chốt lại sau khi B vẽ phân bố ngày 3
   area_ratio_range: [0.002, 0.10]
-  min_fill_ratio: 0.5
-  min_edge_density: 0.15
+  min_fill_ratio: 0.4
+  min_edge_density: 0.12
   max_angle: 30
   top_k: 5
 hog_svm:
@@ -438,6 +438,8 @@ evaluate:
   iou_threshold: 0.5
   char_iou_threshold: 0.5
 ```
+
+Tham số `localize` đã chỉnh trên tập tune, chi tiết ở `notes.md`.
 
 `config.py` có `load_config(path: str = "config/default.yaml", overrides: dict | None = None) -> dict` (merge sâu `overrides` vào config) và `get(cfg: dict, dotted_key: str, default=None)`.
 
