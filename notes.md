@@ -56,6 +56,20 @@ Nhận xét: nới ngưỡng fill/density là bước tăng lớn nhất (mặt 
 
 ## Nắn
 
+2026-11-05. Đo trên tập tune, chỉ ảnh mà top-1 `localize_edge` có IoU ≥ 0.5 với GT (n=128), corner_error theo pixel ảnh gốc so với quad GT.
+Phương pháp: `approxpoly` = mặt nạ HSV xanh dương (H 95-135, S ≥ 70, V ≥ 40) trong bbox nới 15%, đóng/mở morph, giới hạn trong quad ứng viên (chống rò nền xanh), contour lớn nhất chứa tâm, convex hull, approxPolyDP với epsilon tăng 1%..15% chu vi tới đúng 4 đỉnh. Lùi về quad minAreaRect khi: không ra 4 đỉnh, không lồi, diện tích <30% hay >300% bbox.
+
+| subset | n | minAreaRect mean / median | approxpoly mean / median | fallback approxpoly | ms (minAR / approx) |
+| --- | --- | --- | --- | --- | --- |
+| base | 110 | 18.42 / 11.69 | 16.79 / 11.50 | 0.05 | 0.54 / 2.97 |
+| blur | 4 | 14.98 / 10.93 | 15.45 / 11.06 | 0.50 | 0.81 / 3.63 |
+| challenge | 7 | 29.47 / 23.25 | 21.82 / 15.52 | 0.00 | 0.64 / 3.36 |
+| db | 5 | 32.90 / 30.02 | 27.41 / 26.78 | 0.80 | 0.42 / 5.42 |
+| tilt | 2 | 33.96 / 33.96 | 28.84 / 28.84 | 0.50 | 2.95 / 8.34 |
+| ALL | 128 | 19.72 / 13.37 | 17.62 / 12.20 | 0.09 | 0.59 / 3.19 |
+
+Chọn `rectify.quad_method: approxpoly` (mean 19.7 -> 17.6 px). Mức lợi chỉ có ở trung bình, không có ý nghĩa theo từng ảnh (45 ảnh tốt hơn / 48 kém hơn / 35 hòa; Wilcoxon p = 0.46; CI 95% của chênh lệch trung bình [0.5, 4.0] px); hằng số đã chỉnh và đo trên cùng 128 ảnh tune; 107/128 ảnh có ít nhất một góc thật nằm ngoài quad ứng viên nên trần sai số do bước định vị quyết định, không phải approxpoly. Cải thiện nhỏ: sai số chủ yếu do bbox/quad ứng viên đã lệch (IoU ≥ 0.5 vẫn có thể lệch 10-20 px), mặt nạ chỉ sửa được trong quad ứng viên. Mặt nạ không giới hạn theo quad ứng viên cho mean 25.6 (tệ hơn minAreaRect) vì rò vào nền xanh/xám xanh. Nhóm tilt/db/blur mẫu quá ít (n ≤ 7), fallback cao, chưa kết luận được. Kiểm tra mắt: warp quad GT cho biển thẳng, lấp đầy, không bị lật; tốt hơn hẳn crop bbox ở ảnh nghiêng (ví dụ tilt_0004, challenge_0004).
+
 ## Nhị phân
 
 ## Tách ký tự

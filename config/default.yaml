@@ -38,7 +38,7 @@ hog_svm:
   score_threshold: 0.0
 rectify:
   plate_size: [220, 70]                    # tỉ lệ 440:140 mm của biển xanh Trung Quốc
-  quad_method: minarearect                 # minarearect | approxpoly
+  quad_method: approxpoly                  # minarearect | approxpoly
 binarize:
   method: otsu                             # otsu | adaptive
   adaptive: {block_size: 25, C: 7}
