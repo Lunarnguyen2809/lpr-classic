@@ -100,3 +100,16 @@ def test_clean_binary_removes_speck_keeps_strokes():
     assert out[3, 3] == 0
     assert out[H // 2, 15 + 6] == 255
     assert set(np.unique(out)) <= {0, 255}
+
+
+@pytest.mark.parametrize("dark_text", [True, False])
+def test_functions_do_not_modify_input(dark_text):
+    """SPEC mục 6: mọi hàm không được sửa ảnh đầu vào tại chỗ."""
+    gray = _plate(dark_text)
+    g0 = gray.copy()
+    for m in ("otsu", "adaptive"):
+        b = binarize_plate(gray, m, {"block_size": 25, "C": 7})
+        assert np.array_equal(gray, g0)
+        b0 = b.copy()
+        clean_binary(ensure_text_white(b))
+        assert np.array_equal(b, b0)

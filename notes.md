@@ -72,7 +72,7 @@ Chọn `rectify.quad_method: approxpoly` (mean 19.7 -> 17.6 px). Mức lợi ch�
 
 ## Nhị phân
 
-2026-11-06, B. Thử nhanh trên 5 ảnh tune (mỗi subset 1 ảnh), crop = warp quad GT 220×70, ảnh xám, sau `ensure_text_white` + `clean_binary` open (2,2). Script: `python notebooks/try_binarize.py [--C ..] [--block ..]`, ảnh lưới ở `results/try_binarize/`.
+2026-11-06, B. Thử nhanh trên 5 ảnh tune (mỗi subset 1 ảnh), crop = warp quad GT 220×70, ảnh xám, sau `ensure_text_white` + `clean_binary` open (2,2). Script: `python experiments/check_binarize.py [--C ..] [--block ..]`, ảnh lưới ở `results/figures/binarize/compare.png`.
 Chưa có `segment.py` nên chỉ đếm thô "blob giống ký tự" (CCA, lọc theo `segment.char_height_range`, `char_aspect_range`, `min_area`) so với 7 ký tự thật. Đây là kiểm tra bằng mắt, không phải metric chính thức (đợi E5).
 
 Lỗi phát hiện: bản đầu dùng `adaptiveThreshold(THRESH_BINARY, C>0)` thì với biển xanh chữ trắng, nền phẳng thành trắng và ký tự chỉ còn viền (base_0000 chỉ 3/7). Sửa: Otsu đoán cực tính, chữ sáng thì đảo xám, rồi `THRESH_BINARY_INV`. Thêm test nền phẳng phải đen.

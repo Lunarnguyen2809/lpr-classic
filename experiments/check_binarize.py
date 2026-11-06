@@ -1,12 +1,12 @@
 # OWNER: B
-"""Thử binarize trên vài ảnh thật (mỗi subset 1 ảnh trong split tune) để so otsu vs adaptive.
+"""Kiểm tra binarize trên vài ảnh thật (mỗi subset 1 ảnh trong split tune) để so otsu vs adaptive.
 
 Chạy:
-    python notebooks/try_binarize.py                 # 5 ảnh: base, tilt, blur, db, challenge
-    python notebooks/try_binarize.py --block 31 --C 5 --open 2 2
+    python experiments/check_binarize.py                 # 5 ảnh: base, tilt, blur, db, challenge
+    python experiments/check_binarize.py --block 31 --C 5 --open 2 2
 
 Output:
-    results/try_binarize/grid.png   cột: biển màu | xám | otsu | adaptive  (mỗi hàng 1 ảnh)
+    results/figures/binarize/compare.png   cột: biển màu | xám | otsu | adaptive  (mỗi hàng 1 ảnh)
     bảng in ra console: số blob "giống ký tự" so với số ký tự thật.
 """
 from __future__ import annotations
@@ -65,7 +65,7 @@ def main() -> None:
     ap.add_argument("--C", type=float, default=None, help="ghi đè adaptive.C")
     ap.add_argument("--open", type=int, nargs=2, default=[2, 2], help="kernel clean_binary (rộng cao)")
     ap.add_argument("--crop", default="quad", choices=["quad", "bbox"])
-    ap.add_argument("--out", default="results/try_binarize/grid.png")
+    ap.add_argument("--out", default="results/figures/binarize/compare.png")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
