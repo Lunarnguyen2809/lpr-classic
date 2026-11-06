@@ -72,6 +72,23 @@ Chọn `rectify.quad_method: approxpoly` (mean 19.7 -> 17.6 px). Mức lợi ch�
 
 ## Nhị phân
 
+2026-11-06, B. Thử nhanh trên 5 ảnh tune (mỗi subset 1 ảnh), crop = warp quad GT 220×70, ảnh xám, sau `ensure_text_white` + `clean_binary` open (2,2). Script: `python experiments/check_binarize.py [--C ..] [--block ..]`, ảnh lưới ở `results/figures/binarize/compare.png`.
+Chưa có `segment.py` nên chỉ đếm thô "blob giống ký tự" (CCA, lọc theo `segment.char_height_range`, `char_aspect_range`, `min_area`) so với 7 ký tự thật. Đây là kiểm tra bằng mắt, không phải metric chính thức (đợi E5).
+
+Lỗi phát hiện: bản đầu dùng `adaptiveThreshold(THRESH_BINARY, C>0)` thì với biển xanh chữ trắng, nền phẳng thành trắng và ký tự chỉ còn viền (base_0000 chỉ 3/7). Sửa: Otsu đoán cực tính, chữ sáng thì đảo xám, rồi `THRESH_BINARY_INV`. Thêm test nền phẳng phải đen.
+
+Số blob / 7 (sau khi sửa), adaptive block_size 25:
+
+| ảnh | otsu | adaptive C=3 | C=5 | C=7 (mặc định) |
+|---|---|---|---|---|
+| base_0000 | 7 | 7 | 7 | 7 |
+| tilt_0004 | 6 | 6 | 7 | 7 |
+| blur_0004 | 3 | 1 | 3 | 1 |
+| db_0004 | 4 | 7 | 7 | 6 |
+| challenge_0004 | 5 | 7 | 8 | 9 |
+
+Nhận xét bằng mắt: adaptive giữ nét rời, không dính viền biển tốt hơn Otsu ở ảnh rõ/nghiêng/tối (Otsu dính viền dưới, đứt "0", "8"). Ảnh mờ (blur) adaptive vỡ vụn vì tương phản thấp; Otsu ra khối đặc nhưng các ký tự dính nhau. Blob thừa ở challenge là viền/ốc biển, để `segment` lọc. C=5 có vẻ cân bằng nhất nhưng n=5 quá ít; chưa đổi `default.yaml`, chốt method/C bằng E5 trên cả tập tune.
+
 ## Tách ký tự
 
 ## Đánh giá
