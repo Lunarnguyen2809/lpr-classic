@@ -2,6 +2,7 @@
 """Nhị phân ảnh biển đã nắn (SPEC mục 8.9)."""
 from __future__ import annotations
 
+import cv2
 import numpy as np
 
 from lpr.types import BinarizeMethod
@@ -13,7 +14,22 @@ def binarize_plate(plate_gray: np.ndarray, method: BinarizeMethod, params: dict)
     Input: ảnh xám uint8, method ∈ {otsu, adaptive}, params (ví dụ {"block_size": 25, "C": 7}).
     Output: ảnh nhị phân uint8 0/255.
     """
-    raise NotImplementedError("TODO(B): binarize_plate")
+    if plate_gray.ndim != 2:
+        raise ValueError(f"cần ảnh xám 2 chiều, nhận shape {plate_gray.shape}")
+    gray = plate_gray if plate_gray.dtype == np.uint8 else plate_gray.astype(np.uint8)
+
+    if method == "otsu":
+        _, b = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        return b
+    if method == "adaptive":
+        bs = int(params.get("block_size", 25))
+        if bs % 2 == 0:                    # OpenCV bắt buộc block_size lẻ
+            bs += 1
+        bs = max(bs, 3)
+        c = float(params.get("C", 7))
+        return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                     cv2.THRESH_BINARY, bs, c)
+    raise ValueError(f"method không hợp lệ: {method!r} (chỉ nhận 'otsu' | 'adaptive')")
 
 
 def ensure_text_white(binary: np.ndarray) -> np.ndarray:
@@ -21,9 +37,15 @@ def ensure_text_white(binary: np.ndarray) -> np.ndarray:
 
     Biển xanh CCPD có chữ trắng, biển vàng có chữ đen. Output: ảnh nhị phân mới.
     """
-    raise NotImplementedError("TODO(B): ensure_text_white")
+    if np.count_nonzero(binary) / binary.size > 0.5:
+        return cv2.bitwise_not(binary)
+    return binary.copy()
 
 
 def clean_binary(binary: np.ndarray, open_k: tuple[int, int] = (2, 2)) -> np.ndarray:
-    """Mở hình thái học để bỏ nhiễu nhỏ. Output: ảnh nhị phân uint8 0/255."""
-    raise NotImplementedError("TODO(B): clean_binary")
+    """Mở hình thái học để bỏ nhiễu nhỏ. Output: ảnh nhị phân uint8 0/255.
+
+    open_k dạng (rộng, cao), giống quy ước trong localize/edge.py.
+    """
+    se = cv2.getStructuringElement(cv2.MORPH_RECT, (int(open_k[0]), int(open_k[1])))
+    return cv2.morphologyEx(binary, cv2.MORPH_OPEN, se)
