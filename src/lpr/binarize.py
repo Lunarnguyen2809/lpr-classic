@@ -27,8 +27,15 @@ def binarize_plate(plate_gray: np.ndarray, method: BinarizeMethod, params: dict)
             bs += 1
         bs = max(bs, 3)
         c = float(params.get("C", 7))
+        # adaptiveThreshold chỉ "bắt" nét tối hơn nền xung quanh ít nhất C (THRESH_BINARY_INV),
+        # nên trước hết đưa ảnh về dạng chữ tối: dùng Otsu đoán cực tính, chữ sáng (biển xanh)
+        # thì đảo xám. Nếu dùng THRESH_BINARY với C > 0 trên chữ sáng, nền phẳng thành trắng
+        # và ký tự chỉ còn viền rỗng.
+        _, o = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        if np.count_nonzero(o) / o.size <= 0.5:   # phần sáng ít hơn -> chữ sáng
+            gray = cv2.bitwise_not(gray)
         return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                     cv2.THRESH_BINARY, bs, c)
+                                     cv2.THRESH_BINARY_INV, bs, c)
     raise ValueError(f"method không hợp lệ: {method!r} (chỉ nhận 'otsu' | 'adaptive')")
 
 

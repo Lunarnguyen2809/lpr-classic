@@ -48,6 +48,15 @@ def test_adaptive_handles_uneven_light():
         assert out[H // 2, 15 + i * 29 + 6] == 255
 
 
+@pytest.mark.parametrize("dark_text", [True, False])
+def test_adaptive_flat_background_stays_black(dark_text):
+    """Nền phẳng không được thành trắng, ký tự phải đặc chứ không chỉ còn viền."""
+    out = binarize_plate(_plate(dark_text), "adaptive", {"block_size": 25, "C": 7})
+    assert out[3, 3] == 0                  # góc nền phẳng
+    assert out[H // 2, 15 + 6] == 255      # tâm vạch ký tự
+    assert np.count_nonzero(out) / out.size < 0.5
+
+
 def test_adaptive_even_block_size_ok():
     out = binarize_plate(_plate(), "adaptive", {"block_size": 24, "C": 7})
     assert set(np.unique(out)) <= {0, 255}
