@@ -91,4 +91,56 @@ Nhận xét bằng mắt: adaptive giữ nét rời, không dính viền biển 
 
 ## Tách ký tự
 
+### CCA (`segment_cca` + `merge_split_boxes`), 2026-11-07, B
+
+Cấu hình: crop warp quad GT 220×70, binarize theo config (otsu) + `ensure_text_white` + `clean_binary` (2,2), segment `cca`, tham số `segment.*` mặc định (height [0.4, 0.9], aspect [0.15, 1.0], min_area 30). Script: `python experiments/check_segment.py`, ảnh ở `results/figures/segment/cca.png`.
+
+Hằng số hình học nội bộ trong `segment.py` (không phải tham số thí nghiệm): bỏ thành phần rộng > 30% biển nếu rỗng (fill < 0.35); bỏ mảnh dẹt (cao < 20% biển, rộng > 2× cao); bỏ thành phần có tâm y ngoài [0.25, 0.75] chiều cao (ốc vít, mép); gộp mảnh chồng ≥ 50% theo x; gộp mảnh hẹp (rộng/cao < aspect min) với mảnh kề nếu khe ≤ 6% chiều cao; merge_split: gộp khi có hộp < 0.75× trung vị, khe ≤ 0.3×, hộp gộp ≤ 1.4×; cắt hộp ≥ 1.7× trung vị.
+
+10 biển tune (2 mỗi subset): count_match 3/10, vị trí đúng 45/70.
+
+| image_id | hộp/7 | pos | ghi chú |
+|---|---|---|---|
+| base_0000 | 7 | 6/7 | trượt vị trí 6 là số "1" (xem dưới) |
+| base_0002 | 7 | 7/7 | |
+| tilt_0004 | 6 | 5/7 | "8" dính viền dưới, "1" trượt metric |
+| tilt_0006 | 5 | 4/7 | nhòe chuyển động, khối dính |
+| blur_0004 | 6 | 5/7 | khối "Y996S" dính, cắt đều không đủ chính xác |
+| blur_0006 | 1 | 0/7 | Otsu ra một khối đặc, hỏng từ bước nhị phân |
+| db_0004 | 7 | 5/7 | |
+| db_0006 | 6 | 5/7 | ký tự Hán mảnh bị mất, "1" mảnh bị loại |
+| challenge_0004 | 6 | 4/7 | "N256" dính nhau |
+| challenge_0006 | 4 | 4/7 | "6MK" dính, biển mờ |
+
+Cả tập tune (n=198), so với bản đầu xóa mọi thành phần rộng > 30% biển:
+
+| subset | n | count (cũ → mới) | pos0 | pos1_6 | all_correct |
+|---|---|---|---|---|---|
+| base | 150 | 0.587 → 0.627 | 0.833 → 0.860 | 0.830 → 0.848 | 0.407 → 0.440 |
+| blur | 12 | 0.167 → 0.167 | 0.500 → 0.417 | 0.319 → 0.389 | 0.083 → 0.083 |
+| challenge | 12 | 0.250 → 0.333 | 0.583 → 0.750 | 0.486 → 0.556 | 0.250 → 0.250 |
+| db | 12 | 0.167 → 0.167 | 0.167 → 0.250 | 0.306 → 0.306 | 0.083 → 0.083 |
+| tilt | 12 | 0.333 → 0.417 | 0.500 → 0.583 | 0.667 → 0.694 | 0.083 → 0.083 |
+| ALL | 198 | 0.500 → 0.540 | 0.737 → 0.773 | 0.737 → 0.760 | 0.338 → 0.364 |
+
+Thay đổi: khối đặc rộng (nhiều ký tự dính) không còn bị xóa như viền mà giữ lại để `merge_split_boxes` cắt. Hằng số chọn trên chính tập tune, chưa đo test.
+
+**Vấn đề với số "1" (cần nhóm quyết, chưa sửa):** trên 150 biển base, vị trí chứa "1" chỉ đúng 3/56 (5%) so với 889/994 (89%) ở ký tự khác. Nguyên nhân chính không phải CCA mà là metric SPEC 9.3: hộp "1" rộng ~9 px, khuôn rộng 22.5 px nên IoU trục x ≈ 0.4 < 0.5 dù hộp nằm đúng giữa khuôn. Phụ: 11% nét "1" có rộng/cao < 0.15 (trung vị 0.21) nên bị `char_aspect_range` loại. Hướng sửa có thể: đổi position_hits sang "tâm hộp nằm trong khoảng khuôn" hoặc IoU so với hộp hẹp hơn (đổi định nghĩa SPEC 9.3), và/hoặc hạ aspect min xuống ~0.1 (config SHARED).
+
+### Kiểm tra khuôn `char_template_mm`
+
+5 biển base cho đúng 7 hộp (base_0000, 0002, 0009, 0011, 0015). Lệch = tâm hộp − tâm khuôn, 1 px = 2 mm:
+
+| vị trí | khuôn (px) | lệch TB px | min..max px | lệch TB mm | rộng hộp TB px | rộng khuôn px |
+|---|---|---|---|---|---|---|
+| 0 | 7.8–30.2 | −3.0 | −4.5..0.0 | −6.0 | 26.0 | 22.5 |
+| 1 | 36.2–58.8 | −1.4 | −2.0..−0.5 | −2.8 | 22.6 | 22.5 |
+| 2 | 75.8–98.2 | −2.6 | −3.5..−2.0 | −5.2 | 24.0 | 22.5 |
+| 3 | 104.2–126.8 | −2.7 | −4.0..−1.5 | −5.4 | 22.8 | 22.5 |
+| 4 | 132.8–155.2 | −3.3 | −4.5..−2.0 | −6.6 | 23.0 | 22.5 |
+| 5 | 161.2–183.8 | −3.4 | −4.0..−2.5 | −6.8 | 23.4 | 22.5 |
+| 6 | 189.8–212.2 | −2.9 | −5.0..1.0 | −5.8 | 17.4 | 22.5 |
+
+Trung bình |lệch| 2.8 px, lớn nhất 5.0 px. Khuôn khớp về khoảng cách giữa các ký tự (lệch gần như đều nhau), nhưng toàn bộ ký tự thật lệch trái ~3 px (~6 mm) so với khuôn: có thể do quad GT của CCPD ôm cả viền hoặc lệch nhẹ. Với hộp rộng ~23 px, lệch 3 px vẫn cho IoU x ≈ 0.77 nên chưa làm trượt position_hits. **Chưa sửa config** (SHARED); nếu muốn chỉnh thì trừ ~6 mm ở mọi khoảng, cần đo thêm trên nhiều biển.
+
 ## Đánh giá
