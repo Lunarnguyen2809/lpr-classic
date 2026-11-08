@@ -226,4 +226,26 @@ Cùng script `experiments/check_segment_all.py`, tập tune n=198.
 
 Tóm lại trên tune: crop **quad** chắc chắn; binarize và segment **chưa phân thắng thua** (chênh ≤ 1 biển). Không đổi config. Hằng số trong segment.py chọn trên chính tune nên số liệu hơi lạc quan; kết luận cuối dựa vào E5/E6 trên test. Điểm nghẽn lớn nhất hiện tại là metric số "1" (trần all_correct ~0.69), tiếp theo là nhóm db (tối, tương phản thấp).
 
+### Chạy lại sau khi merge #6 (luật tâm, aspect min 0.10), 2026-11-08, Bích
+
+Cùng script, tập tune n=198, metric mới. Bảng trên giữ lại để so trước/sau.
+
+| so sánh | cấu hình | count | pos0 | pos1_6 | all_correct | số "1" trúng | đúng riêng |
+|---|---|---|---|---|---|---|---|
+| binarize (cca, quad) | otsu | 0.556 | 0.788 | 0.820 | 0.515 | 0.88 | 32 |
+| | adaptive | 0.566 | 0.818 | **0.896** | 0.515 | 0.88 | 32 |
+| segment (adaptive, quad) | **cca** | **0.566** | 0.818 | 0.896 | **0.515** | 0.88 | 18 |
+| | projection | 0.545 | **0.828** | **0.906** | 0.490 | 0.89 | 13 |
+| crop (adaptive, cca) | bbox | 0.409 | 0.475 | 0.641 | 0.192 | 0.61 | 11 |
+| | **quad** | **0.566** | **0.818** | **0.896** | **0.515** | 0.88 | 75 |
+
+Theo subset (adaptive + cca + quad): base 0.613, blur 0.250, challenge 0.167, db 0.083, tilt 0.333.
+
+Nhận xét:
+- Luật tâm sửa đúng chỗ: số "1" trúng 0.05 → 0.88, all_correct 0.369 → 0.515.
+- **Quad vẫn thắng rõ** (75 vs 11 biển).
+- **Otsu vs adaptive vẫn hòa** (0.515 = 0.515, 32 vs 32 biển). Adaptive hơn ở pos1_6 (0.896 vs 0.820) nhưng không thành all_correct vì sai số hộp.
+- **CCA nhỉnh hơn projection** (0.515 vs 0.490, 18 vs 13 biển, sign test p ≈ 0.47): chưa đủ để gọi là thắng. Projection trúng vị trí nhiều hơn (pos1_6 0.906) nhưng hay thừa/thiếu hộp (count 0.545) do cắt "H" thành hai nét.
+- Không đổi config. Điểm nghẽn còn lại: nhóm db (all 0.083) và count_match (~0.56, tức gần nửa biển vẫn sai số hộp).
+
 ## Đánh giá
