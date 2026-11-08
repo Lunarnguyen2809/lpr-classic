@@ -89,6 +89,31 @@ Số blob / 7 (sau khi sửa), adaptive block_size 25:
 
 Nhận xét bằng mắt: adaptive giữ nét rời, không dính viền biển tốt hơn Otsu ở ảnh rõ/nghiêng/tối (Otsu dính viền dưới, đứt "0", "8"). Ảnh mờ (blur) adaptive vỡ vụn vì tương phản thấp; Otsu ra khối đặc nhưng các ký tự dính nhau. Blob thừa ở challenge là viền/ốc biển, để `segment` lọc. C=5 có vẻ cân bằng nhất nhưng n=5 quá ít; chưa đổi `default.yaml`, chốt method/C bằng E5 trên cả tập tune.
 
+### Otsu vs adaptive trên cả tập tune, 2026-11-08, B
+
+`python experiments/check_segment_all.py` (chỉ split tune, n=198). Cố định segment `cca`, crop warp quad GT, adaptive block 25 C 7, sau `ensure_text_white` + `clean_binary`. Bảng đầy đủ ở `results/tables/check_segment_all.csv`, ví dụ ở `results/figures/segment/compare_binarize.png`. Cột "số 1" = tỉ lệ vị trí chứa số "1" được tính đúng (trong ngoặc là số lần xuất hiện).
+
+| binarize | subset | n | count | pos0 | pos1_6 | all_correct | số 1 |
+|---|---|---|---|---|---|---|---|
+| otsu | base | 150 | 0.627 | 0.860 | 0.848 | 0.440 | 0.05 (56) |
+| otsu | blur | 12 | 0.167 | 0.417 | 0.389 | 0.083 | 0.00 (1) |
+| otsu | challenge | 12 | 0.333 | 0.750 | 0.556 | 0.250 | 1.00 (2) |
+| otsu | db | 12 | 0.167 | 0.250 | 0.306 | 0.083 | 0.22 (9) |
+| otsu | tilt | 12 | 0.417 | 0.583 | 0.694 | 0.083 | 0.14 (7) |
+| **otsu** | **ALL** | 198 | 0.540 | **0.773** | 0.760 | 0.364 | 0.11 (75) |
+| adaptive | base | 150 | 0.620 | 0.873 | 0.891 | 0.440 | 0.02 (56) |
+| adaptive | blur | 12 | 0.417 | 0.500 | 0.625 | 0.167 | 0.00 (1) |
+| adaptive | challenge | 12 | 0.583 | 0.583 | 0.792 | 0.333 | 0.50 (2) |
+| adaptive | db | 12 | 0.167 | 0.083 | 0.181 | 0.000 | 0.00 (9) |
+| adaptive | tilt | 12 | 0.500 | 0.583 | 0.694 | 0.083 | 0.29 (7) |
+| **adaptive** | **ALL** | 198 | **0.571** | 0.768 | **0.814** | **0.369** | 0.05 (75) |
+
+Nhận xét:
+- Gần như **hòa**: all_correct 0.369 vs 0.364. Tính theo cặp, adaptive đúng hết mà otsu sai ở 21 biển, ngược lại 20 biển (sign test p = 1.0). Không đủ bằng chứng để đổi `binarize.method` trong config; adaptive chỉ được chọn làm nền cho bước 2 vì nhỉnh hơn.
+- Adaptive hơn rõ ở pos1_6 (0.814 vs 0.760) và ở blur/challenge: Otsu dùng một ngưỡng cho cả biển nên biển cháy sáng (base_0124) hoặc mờ (base_0057) dính ký tự Hán với "A", dính "FF" thành khối.
+- Adaptive thua ở db (pos0 0.083, all 0.000): biển tối/ngược sáng có tương phản thấp hơn C=7 nên nét chữ vỡ vụn; nhiễu dọc nối vào ký tự thành khối rộng (base_0042) hoặc mép viền dọc thành hộp thừa (base_0011, 8/7).
+- Trên 137 biển không có số "1", all_correct của hai cách bằng nhau (0.526). Số "1" (75 lần trên 61 biển) gần như luôn tính sai do metric (đã ghi ở mục Tách ký tự), nên trần all_correct thực tế bị chặn ~0.69.
+
 ## Tách ký tự
 
 ### CCA (`segment_cca` + `merge_split_boxes`), 2026-11-07, B
@@ -142,5 +167,48 @@ Thay đổi: khối đặc rộng (nhiều ký tự dính) không còn bị xóa
 | 6 | 189.8–212.2 | −2.9 | −5.0..1.0 | −5.8 | 17.4 | 22.5 |
 
 Trung bình |lệch| 2.8 px, lớn nhất 5.0 px. Khuôn khớp về khoảng cách giữa các ký tự (lệch gần như đều nhau), nhưng toàn bộ ký tự thật lệch trái ~3 px (~6 mm) so với khuôn: có thể do quad GT của CCPD ôm cả viền hoặc lệch nhẹ. Với hộp rộng ~23 px, lệch 3 px vẫn cho IoU x ≈ 0.77 nên chưa làm trượt position_hits. **Chưa sửa config** (SHARED); nếu muốn chỉnh thì trừ ~6 mm ở mọi khoảng, cần đo thêm trên nhiều biển.
+
+### Projection + so sánh cca/projection, crop bbox/quad, 2026-11-08, B
+
+`split_lines`: chiếu ngang, hàng > 3% trắng là chữ, > 85% là viền; nối khe ≤ 5% chiều cao, bỏ dòng < 20%. `segment_projection`: bỏ viền/ốc vít (cùng luật CCA) → profile cột trong từng dòng, cột ≥ 10% chiều cao dòng là cột chữ → nối dải cách nhau < `min_gap` (2), nối dải hẹp với dải kề nếu khe ≤ 6% chiều cao (ký tự Hán vỡ) → bỏ dải < `min_width` (4) → dải ≥ 1.7× trung vị cắt tại cột ít trắng nhất trong ± 0.3× trung vị quanh vị trí cắt dự kiến → co hộp theo y → lọc chiều cao, tỉ lệ, diện tích. CCPD toàn biển 1 dòng nên split_lines chỉ kiểm 2 dòng bằng test giả.
+
+Cùng script `experiments/check_segment_all.py`, tập tune n=198.
+
+**cca vs projection** (cố định adaptive, crop quad):
+
+| segment | subset | n | count | pos0 | pos1_6 | all_correct | số 1 |
+|---|---|---|---|---|---|---|---|
+| cca | base | 150 | 0.620 | 0.873 | 0.891 | 0.440 | 0.02 |
+| cca | blur | 12 | 0.417 | 0.500 | 0.625 | 0.167 | 0.00 |
+| cca | challenge | 12 | 0.583 | 0.583 | 0.792 | 0.333 | 0.50 |
+| cca | db | 12 | 0.167 | 0.083 | 0.181 | 0.000 | 0.00 |
+| cca | tilt | 12 | 0.500 | 0.583 | 0.694 | 0.083 | 0.29 |
+| **cca** | **ALL** | 198 | 0.571 | 0.768 | **0.814** | 0.369 | 0.05 |
+| projection | base | 150 | 0.620 | 0.907 | 0.879 | 0.440 | 0.04 |
+| projection | blur | 12 | 0.417 | 0.333 | 0.611 | 0.167 | 0.00 |
+| projection | challenge | 12 | 0.583 | 0.583 | 0.778 | 0.333 | 0.50 |
+| projection | db | 12 | 0.250 | 0.167 | 0.208 | 0.000 | 0.00 |
+| projection | tilt | 12 | 0.583 | 0.667 | 0.681 | 0.083 | 0.00 |
+| **projection** | **ALL** | 198 | **0.581** | **0.793** | 0.804 | 0.369 | 0.04 |
+
+**Hòa**: all_correct bằng nhau 0.369; projection đúng hết mà cca sai 13 biển, ngược lại 13 biển (p = 1.0). Script chọn projection chỉ nhờ count_match nhỉnh hơn (0.581 vs 0.571). Mỗi cách thua theo kiểu riêng (`results/figures/segment/compare_segment.png`):
+- CCA thua khi ký tự dính với nhiễu dọc hoặc mép viền dọc: base_0042 "06" + chấm nhiễu thành khối, cắt đều ra 3 hộp (9/7); base_0055, base_0094 mép phải thành hộp thừa (8/7); base_0090 chữ Hán vỡ nhiều mảnh nhỏ bị lọc mất (5/7). Projection không bị vì chấm/vệt mảnh không đủ 10% chiều cao cột, và các mảnh chữ Hán vẫn nằm chung một dải cột.
+- Projection thua khi ký tự có cột giữa thưa: "H" (base_0033) chỉ có vạch ngang mảnh ở giữa, cột giữa dưới ngưỡng 10% nên bị cắt thành hai nét đứng hẹp và bị loại (6/7); "J" (base_0072) hộp lệch vì phần móc dưới thưa.
+
+**crop bbox vs quad** (cố định adaptive, projection):
+
+| crop | subset | n | count | pos0 | pos1_6 | all_correct |
+|---|---|---|---|---|---|---|
+| bbox | base | 150 | 0.540 | 0.580 | 0.624 | 0.173 |
+| bbox | blur | 12 | 0.417 | 0.250 | 0.500 | 0.083 |
+| bbox | challenge | 12 | 0.333 | 0.333 | 0.569 | 0.167 |
+| bbox | db | 12 | 0.000 | 0.000 | 0.014 | 0.000 |
+| bbox | tilt | 12 | 0.000 | 0.083 | 0.167 | 0.000 |
+| **bbox** | **ALL** | 198 | 0.455 | 0.480 | 0.549 | 0.146 |
+| **quad** | **ALL** | 198 | **0.581** | **0.793** | **0.804** | **0.369** |
+
+**Quad thắng rõ**: 50 biển chỉ quad đúng hết, 6 biển chỉ bbox đúng (sign test p < 0.001); thắng ở mọi subset, chênh nhất ở tilt và db (bbox count = 0). Lý do: bbox là hình chữ nhật thẳng ôm biển nghiêng nên lẫn nền và viền, chữ bị xiên và lệch khỏi khuôn cố định (base_0002 bbox: đủ 7 hộp nhưng chỉ 3/7 vị trí). Ca bbox thắng (base_0072, 0155) là do quad GT hơi rộng nên mép viền thành hộp thừa.
+
+Tóm lại trên tune: crop **quad** chắc chắn; binarize và segment **chưa phân thắng thua** (chênh ≤ 1 biển). Không đổi config. Hằng số trong segment.py chọn trên chính tune nên số liệu hơi lạc quan; kết luận cuối dựa vào E5/E6 trên test. Điểm nghẽn lớn nhất hiện tại là metric số "1" (trần all_correct ~0.69), tiếp theo là nhóm db (tối, tương phản thấp).
 
 ## Đánh giá
