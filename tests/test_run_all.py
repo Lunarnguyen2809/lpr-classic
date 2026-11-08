@@ -178,3 +178,17 @@ def test_char_box_rows_perfect_labels(cfg, monkeypatch):
     assert out[("cca", "ALL")]["char_f1"] == pytest.approx(1.0)
     assert out[("cca", "base")]["char_n"] == 1
     assert out[("projection", "ALL")]["char_f1"] == pytest.approx(1.0)
+
+
+def test_color_table_rank_per_subset():
+    sep = pd.DataFrame([
+        {"image_id": "a", "subset": "base", "channel": "S", "separability": 0.9},
+        {"image_id": "a", "subset": "base", "channel": "gray", "separability": 0.3},
+        {"image_id": "b", "subset": "db", "channel": "S", "separability": 0.2},
+        {"image_id": "b", "subset": "db", "channel": "gray", "separability": 0.4},
+    ])
+    rows = run_all.color_table(sep)
+    by = {(r["subset"], r["channel"]): r for r in rows}
+    assert by[("base", "S")]["rank"] == 1 and by[("db", "gray")]["rank"] == 1
+    assert by[("ALL", "S")]["mean_separability"] == pytest.approx(0.55)
+    assert by[("ALL", "S")]["n"] == 2 and by[("base", "S")]["std"] == 0.0
