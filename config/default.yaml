@@ -45,7 +45,7 @@ binarize:
 segment:
   method: cca                              # cca | projection
   char_height_range: [0.4, 0.9]            # so với chiều cao biển
-  char_aspect_range: [0.15, 1.0]           # rộng / cao
+  char_aspect_range: [0.10, 1.0]           # rộng / cao
   min_area: 30
   projection: {min_gap: 2, min_width: 4}
   # Vị trí khuôn ký tự (mm, biển 440×140): rộng 45, cách 12, sau ký tự thứ 2 cách 34.
@@ -55,3 +55,4 @@ segment:
 evaluate:
   iou_threshold: 0.5
   char_iou_threshold: 0.5
+  char_center_max_width_ratio: 0.6         # luật tâm chỉ cho hộp hẹp: tâm trong khuôn và rộng ≤ 0.6× rộng khuôn, để số "1" trúng (SPEC 9.3)

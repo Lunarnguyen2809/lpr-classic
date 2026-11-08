@@ -5,6 +5,7 @@ from __future__ import annotations
 from lpr.types import BBox, CharBox
 
 PLATE_WIDTH_MM = 440  # chiều rộng biển xanh Trung Quốc (mm), khớp char_template_mm
+CHAR_CENTER_MAX_WIDTH_RATIO = 0.6  # mặc định khi cfg thiếu evaluate.char_center_max_width_ratio
 
 
 def iou(a: BBox, b: BBox) -> float:
@@ -65,14 +66,28 @@ def template_intervals(cfg: dict) -> list[tuple[float, float]]:
     return [(lo * scale, hi * scale) for lo, hi in cfg["segment"]["char_template_mm"]]
 
 
-def position_hits(boxes: list[CharBox], cfg: dict) -> list[bool]:
-    """Với mỗi vị trí i trong 7 vị trí khuôn, True nếu có hộp có IoU trục x ≥ 0.5 với khoảng i (SPEC 9.3).
+def _hit(box: CharBox, iv: tuple[float, float], thr: float, max_width_ratio: float) -> bool:
+    """Hộp trúng khoảng khuôn nếu IoU trục x ≥ thr, hoặc là hộp hẹp (0 < rộng ≤ max_width_ratio × rộng
+    khuôn) có tâm nằm trong [x1, x2) của khuôn (số "1" rộng ~9 px không đạt IoU 0.5 dù nằm giữa)."""
+    if iou_1d((box.x1, box.x2), iv) >= thr:
+        return True
+    cx = (box.x1 + box.x2) / 2
+    w = box.x2 - box.x1
+    return iv[0] <= cx < iv[1] and 0 < w <= max_width_ratio * (iv[1] - iv[0])
 
+
+def position_hits(boxes: list[CharBox], cfg: dict) -> list[bool]:
+    """Với mỗi vị trí i trong 7 vị trí khuôn, True nếu có hộp trúng khoảng i (SPEC 9.3).
+
+    Hộp trúng khi IoU trục x ≥ `evaluate.char_iou_threshold`, hoặc là hộp hẹp (rộng > 0 và
+    ≤ `evaluate.char_center_max_width_ratio` × rộng khuôn) có tâm nằm trong khoảng khuôn.
     Output: list 7 bool.
     """
-    thr = cfg.get("evaluate", {}).get("char_iou_threshold", 0.5)
+    ev = cfg.get("evaluate", {})
+    thr = ev.get("char_iou_threshold", 0.5)
+    ratio = ev.get("char_center_max_width_ratio", CHAR_CENTER_MAX_WIDTH_RATIO)
     return [
-        any(iou_1d((b.x1, b.x2), iv) >= thr for b in boxes)
+        any(_hit(b, iv, thr, ratio) for b in boxes)
         for iv in template_intervals(cfg)
     ]
 
