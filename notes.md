@@ -256,7 +256,7 @@ Nhận xét:
 
 - localization: method `edge` × denoise {none, gaussian, median, bilateral}, mỗi ảnh tối đa top_k = 5 dòng (rank 1..5). Ảnh không có ứng viên vẫn có 1 dòng `rank = 0`, tọa độ trống, `is_tp = False`. `edge_svm` chưa có vì `hog_svm.py` còn TODO. `ms` = thời gian `localize_edge` cả ảnh, lặp lại ở mọi rank.
 - segmentation: crop_source {gt, pred} × crop_method {bbox, quad} × binarize {otsu, adaptive} × segmenter {cca, projection}. Crop pred = top-1 của edge + denoise trong config (bilateral), quad pred theo `rectify.quad_method` (approxpoly). Không có ứng viên thì dòng pred có `n_boxes = 0`, mọi cột đúng/sai = False. `ms` = binarize + segment, không gồm crop.
-- **position_hits vẫn là metric cũ (IoU-x ≥ 0.5)** vì PR #6 (luật tâm cho số "1") chưa merge. Merge xong chạy lại lệnh trên là có file mới.
+- Lần chạy đầu dùng metric cũ (IoU-x ≥ 0.5). **Đã chạy lại sau khi merge #6** (luật tâm, aspect min 0.10): file CSV hiện tại là bản mới, số mới ở bảng cuối mục này.
 
 Số tổng hợp để Châu Anh đối chiếu khi triage (KHÔNG dùng để chọn tham số, đây là tập test):
 
@@ -268,6 +268,8 @@ Số tổng hợp để Châu Anh đối chiếu khi triage (KHÔNG dùng để 
 | bilateral | 0.593 | 0.545 | 0.568 | 0.667 | 37 | 109 |
 
 Recall top-1 (bilateral) theo subset: base 0.609, blur 0.357, challenge 0.429, db 0.321, tilt 0.286.
+
+Tách ký tự, **metric cũ** (lần chạy đầu, giữ để so):
 
 | crop_source | crop | binarize | segment | count | pos0 | pos1_6 | all_correct |
 |---|---|---|---|---|---|---|---|
@@ -282,3 +284,21 @@ Recall top-1 (bilateral) theo subset: base 0.609, blur 0.357, challenge 0.429, d
 (Dòng bbox / pred chỉ ghi tổ hợp có all_correct cao nhất; đủ 16 tổ hợp xem trực tiếp trong CSV.)
 
 Khoảng cách gt → pred (0.43 → ~0.09 all_correct) là phần lỗi do định vị (SPEC 9.5): top-1 chỉ đúng 54.5% ảnh, nên phần lớn lỗi tổng thể nằm ở bước định vị chứ không phải tách ký tự.
+
+**Chạy lại sau khi merge #6** (metric luật tâm, `char_aspect_range` min 0.10), cùng lệnh. Định vị không đổi (bilateral top-1 R = 0.545). Tách ký tự:
+
+| crop_source | crop | binarize | segment | count | pos0 | pos1_6 | all_correct |
+|---|---|---|---|---|---|---|---|
+| gt | quad | otsu | cca | 0.556 | 0.792 | 0.814 | 0.513 |
+| gt | quad | otsu | projection | 0.643 | 0.829 | 0.867 | **0.587** |
+| gt | quad | adaptive | cca | 0.528 | 0.820 | 0.875 | 0.470 |
+| gt | quad | adaptive | projection | 0.524 | 0.870 | 0.910 | 0.474 |
+| gt | bbox | adaptive | cca | 0.457 | 0.558 | 0.662 | 0.249 |
+| gt | bbox | otsu | cca | 0.444 | 0.556 | 0.597 | 0.249 |
+| pred | quad | otsu | projection | 0.281 | 0.418 | 0.370 | 0.141 |
+| pred | quad | adaptive | projection | 0.279 | 0.459 | 0.433 | 0.139 |
+| pred | bbox | otsu | cca | 0.216 | 0.212 | 0.306 | 0.069 |
+
+all_correct theo subset (gt + quad + adaptive + cca, cấu hình thắng trên tune): base 0.571, blur 0.071, challenge 0.107, db 0.214, tilt 0.214.
+
+Lưu ý: trên **test**, otsu + projection (0.587) cao hơn adaptive + cca (0.470), ngược với **tune** (adaptive = otsu, cca nhỉnh hơn projection). Không chọn lại cấu hình theo test; ghi vào phần thảo luận rằng chênh lệch giữa các tổ hợp nhỏ và không ổn định giữa hai tập. Khoảng cách gt → pred (0.59 → 0.14) vẫn cho thấy định vị là nguồn lỗi chính.
