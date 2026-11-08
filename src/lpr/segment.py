@@ -13,6 +13,7 @@ FLAT_HEIGHT_RATIO = 0.2    # mảnh thấp < 20% chiều cao biển và rộng >
 CENTER_BAND = (0.25, 0.75) # tâm y của ký tự nằm giữa biển; ngoài dải này là ốc vít, mép viền
 STACK_OVERLAP = 0.5        # hai mảnh chồng nhau ≥ 50% theo x (mảnh hẹp hơn) là cùng một ký tự
 DENSE_FILL = 0.35          # fill ≥ 0.35: khối chữ đặc (không phải khung viền rỗng)
+NARROW_ASPECT = 0.15       # mảnh có rộng/cao < 0.15 là "mảnh hẹp" để gộp; tách khỏi char_aspect_range (#14)
 NARROW_MAX_GAP = 0.06     # mảnh hẹp cách mảnh kề ≤ 6% chiều cao biển (~4 px) thì gộp
 
 # Ngưỡng cho merge_split_boxes, tính theo trung vị độ rộng hộp.
@@ -21,6 +22,17 @@ MERGE_MAX_GAP = 0.3        # khe giữa hai mảnh ≤ 0.3 × trung vị
 MERGE_MAX_WIDTH = 1.4      # hộp sau khi gộp rộng ≤ 1.4 × trung vị
 SPLIT_MIN_WIDTH = 1.7      # hộp rộng ≥ 1.7 × trung vị bị cắt
 SPLIT_MAX_PARTS = 3
+
+
+def _n_parts(w: float, med: float, gap: float) -> int:
+    """Số ký tự trong một khối rộng w: round((w + khe) / (trung vị rộng + khe)).
+
+    Khối k ký tự dính rộng k × med + (k − 1) × khe, nên chia cho med + khe (cộng thêm một khe
+    ở tử) mới ra đúng k. Chia w / med như trước thì khối 2 ký tự có khe rộng dễ ra 3 (#14).
+    """
+    if med <= 0 or w < SPLIT_MIN_WIDTH * med:
+        return 1
+    return min(SPLIT_MAX_PARTS, int(round((w + gap) / (med + gap))))
 
 # Ngưỡng cho chiếu ngang (split_lines) và chiếu dọc (segment_projection).
 LINE_TEXT_ROW = 0.03       # hàng có > 3% pixel trắng là hàng có chữ
@@ -78,8 +90,8 @@ def _fill(c: list[int]) -> float:
     return c[4] / max(1, (c[2] - c[0]) * (c[3] - c[1]))
 
 
-def _is_frame_or_noise(c: list[int], plate_w: int, plate_h: int) -> bool:
-    """Viền biển, mảnh viền ngang, ốc vít / dấu chấm nằm sát mép trên-dưới.
+def _is_frame_or_noise(c: list[int], plate_w: int, plate_h: int, check_flat: bool = True) -> bool:
+    """Viền biển, mảnh viền ngang (bỏ qua nếu check_flat = False), ốc vít / dấu chấm sát mép trên-dưới.
 
     Thành phần rộng chỉ bị coi là viền khi rỗng (fill thấp); khối đặc rộng thường là nhiều
     ký tự dính nhau, giữ lại để merge_split_boxes cắt.
@@ -88,7 +100,7 @@ def _is_frame_or_noise(c: list[int], plate_w: int, plate_h: int) -> bool:
     w, h = x2 - x1, y2 - y1
     if w > FRAME_WIDTH_RATIO * plate_w and _fill(c) < DENSE_FILL:
         return True
-    if h < FLAT_HEIGHT_RATIO * plate_h and w > 2 * h:
+    if check_flat and h < FLAT_HEIGHT_RATIO * plate_h and w > 2 * h:
         return True
     cy = (y1 + y2) / 2
     return not (CENTER_BAND[0] * plate_h <= cy <= CENTER_BAND[1] * plate_h)
@@ -110,18 +122,19 @@ def _merge_stacked(comps: list[list[int]]) -> list[list[int]]:
     return merged
 
 
-def _merge_narrow_neighbors(comps: list[list[int]], a_lo: float, max_gap: float) -> list[list[int]]:
-    """Gộp mảnh hẹp (rộng/cao < a_lo) với mảnh kề bên trái nếu khe ≤ max_gap.
+def _merge_narrow_neighbors(comps: list[list[int]], max_gap: float) -> list[list[int]]:
+    """Gộp mảnh hẹp (rộng/cao < NARROW_ASPECT) với mảnh kề bên trái nếu khe ≤ max_gap.
 
     Ký tự Hán vỡ trái/phải cho hai mảnh quá hẹp, bị lọc tỉ lệ loại mất trước khi
     merge_split_boxes kịp gộp, nên phải gộp ngay ở đây. Số "1" hẹp nhưng cách xa
-    ký tự bên cạnh nên không bị gộp.
+    ký tự bên cạnh nên không bị gộp. Ngưỡng tách riêng khỏi char_aspect_range: hạ min của
+    bộ lọc (để giữ nét "1") không được làm đổi luật gộp mảnh chữ Hán.
     """
     out: list[list[int]] = []
     for c in sorted(comps, key=lambda c: c[0]):
         if out:
             p = out[-1]
-            narrow = lambda b: (b[2] - b[0]) < a_lo * max(b[3] - b[1], 1)  # noqa: E731
+            narrow = lambda b: (b[2] - b[0]) < NARROW_ASPECT * max(b[3] - b[1], 1)  # noqa: E731
             if (narrow(p) or narrow(c)) and c[0] - p[2] <= max_gap:
                 out[-1] = [p[0], min(p[1], c[1]), max(p[2], c[2]), max(p[3], c[3]), p[4] + c[4]]
                 continue
@@ -132,7 +145,8 @@ def _merge_narrow_neighbors(comps: list[list[int]], a_lo: float, max_gap: float)
 def segment_cca(binary: np.ndarray, cfg: dict) -> list[CharBox]:
     """Tách ký tự bằng connected components, lọc theo cfg["segment"] (chiều cao, tỉ lệ, diện tích).
 
-    Các bước: CCA → bỏ viền / ốc vít → gộp mảnh chồng dọc → lọc chiều cao, tỉ lệ, diện tích
+    Các bước: CCA → bỏ viền / ốc vít → gộp mảnh chồng dọc → bỏ mảnh dẹt → gộp mảnh hẹp
+    → lọc chiều cao, tỉ lệ, diện tích
     → sắp trái sang phải. Chiều cao so với chiều cao biển (CCPD chỉ có 1 dòng).
     Output: list CharBox.
     """
@@ -142,8 +156,12 @@ def segment_cca(binary: np.ndarray, cfg: dict) -> list[CharBox]:
     min_area = seg["min_area"]
     ph, pw = binary.shape[:2]
 
-    comps = [c for c in _components(binary) if not _is_frame_or_noise(c, pw, ph)]
-    comps = _merge_narrow_neighbors(_merge_stacked(comps), a_lo, NARROW_MAX_GAP * ph)
+    # lọc mảnh dẹt SAU khi gộp mảnh chồng dọc: nét ngang của chữ Hán (thấp, dẹt) phải được gộp
+    # vào ký tự trước; mảnh dẹt còn lại một mình (vệt nhiễu, vạch) mới bị bỏ (#14)
+    comps = [c for c in _components(binary) if not _is_frame_or_noise(c, pw, ph, check_flat=False)]
+    comps = [c for c in _merge_stacked(comps)
+             if not (c[3] - c[1] < FLAT_HEIGHT_RATIO * ph and c[2] - c[0] > 2 * (c[3] - c[1]))]
+    comps = _merge_narrow_neighbors(comps, NARROW_MAX_GAP * ph)
     boxes = []
     for x1, y1, x2, y2, area in comps:
         w, h = x2 - x1, y2 - y1
@@ -170,11 +188,11 @@ def _without_noise(binary: np.ndarray) -> np.ndarray:
     return np.where(keep[lab], 255, 0).astype(np.uint8)
 
 
-def _cut_at_valleys(a: int, b: int, prof: np.ndarray, med: float) -> list[tuple[int, int]]:
+def _cut_at_valleys(a: int, b: int, prof: np.ndarray, med: float, gap: float = 0.0) -> list[tuple[int, int]]:
     """Cắt dải cột [a, b) rộng ≥ 1.7 × trung vị thành k phần tại cột ít pixel trắng nhất
     quanh mỗi vị trí cắt dự kiến (± 0.3 × trung vị)."""
     w = b - a
-    k = min(SPLIT_MAX_PARTS, int(round(w / med))) if med > 0 and w >= SPLIT_MIN_WIDTH * med else 1
+    k = _n_parts(w, med, gap)
     if k <= 1:
         return [(a, b)]
     cuts, start = [], a
@@ -216,7 +234,7 @@ def segment_projection(binary: np.ndarray, cfg: dict) -> list[CharBox]:
         cols = prof >= max(1.0, PROJ_COL_RATIO * (y1 - y0))
         runs = _merge_runs(_runs(cols), max_gap=int(pj["min_gap"]) - 1)
         # dải hẹp (mảnh ký tự Hán vỡ trái/phải) nối với dải kề nếu khe nhỏ, cùng luật như CCA
-        narrow_w, gap = a_lo * (y1 - y0), NARROW_MAX_GAP * ph
+        narrow_w, gap = NARROW_ASPECT * (y1 - y0), NARROW_MAX_GAP * ph
         merged: list[tuple[int, int]] = []
         for a, b in runs:
             if merged and a - merged[-1][1] <= gap and min(b - a, merged[-1][1] - merged[-1][0]) < narrow_w:
@@ -227,8 +245,10 @@ def segment_projection(binary: np.ndarray, cfg: dict) -> list[CharBox]:
         if not runs:
             continue
         med = float(np.median([b - a for a, b in runs]))
+        gaps = [runs[i + 1][0] - runs[i][1] for i in range(len(runs) - 1)]
+        med_gap = float(np.median(gaps)) if gaps else 0.0
         for a0, b0 in runs:
-            for a, b in _cut_at_valleys(a0, b0, prof, med):
+            for a, b in _cut_at_valleys(a0, b0, prof, med, med_gap):
                 rows = np.flatnonzero(np.count_nonzero(band[:, a:b], axis=1))
                 if rows.size == 0:
                     continue
@@ -248,7 +268,8 @@ def merge_split_boxes(boxes: list[CharBox], plate_w: int, plate_h: int) -> list[
 
     - Gộp: hai hộp kề nhau cùng dòng, ít nhất một hộp hẹp (< 0.75 × trung vị), khe ≤ 0.3 × trung vị,
       hộp gộp rộng ≤ 1.4 × trung vị. Số "1" hẹp nhưng cách xa ký tự bên cạnh nên không bị gộp.
-    - Cắt: hộp rộng ≥ 1.7 × trung vị chia đều thành round(w / trung vị) phần (tối đa 3).
+    - Cắt: hộp rộng ≥ 1.7 × trung vị chia đều thành round((w + khe) / (trung vị + khe)) phần
+      (tối đa 3), khe = trung vị khe giữa các hộp kề nhau.
     Cần ≥ 3 hộp để trung vị có nghĩa; ít hơn thì chỉ sao chép.
     Output: list CharBox mới, sắp theo (dòng, x1).
     """
@@ -269,10 +290,12 @@ def merge_split_boxes(boxes: list[CharBox], plate_w: int, plate_h: int) -> list[
                 continue
         merged.append(CharBox(b.x1, b.y1, b.x2, b.y2, b.line))
 
+    gaps = [q.x1 - p.x2 for p, q in zip(merged, merged[1:]) if q.line == p.line and q.x1 > p.x2]
+    med_gap = float(np.median(gaps)) if gaps else 0.0
     out: list[CharBox] = []
     for b in merged:
         w = b.x2 - b.x1
-        k = min(SPLIT_MAX_PARTS, int(round(w / med))) if w >= SPLIT_MIN_WIDTH * med else 1
+        k = _n_parts(w, med, med_gap)
         if k <= 1:
             out.append(b)
             continue
