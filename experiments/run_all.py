@@ -14,11 +14,12 @@ import sys
 from typing import Callable
 
 import numpy as np
+import pandas as pd
 
 from lpr.binarize import binarize_plate, clean_binary, ensure_text_white
 from lpr.config import get, load_config
-from lpr.data.dataset import load_records
-from lpr.evaluate import count_match, iou, position_hits
+from lpr.data.dataset import load_char_labels, load_records
+from lpr.evaluate import count_match, iou, match_detections, position_hits, prf
 from lpr.io_utils import read_image, timer, write_csv
 from lpr.localize.edge import localize_edge
 from lpr.preprocess import to_gray
@@ -161,14 +162,131 @@ def exp_rectify(cfg: dict, args: argparse.Namespace) -> None:
     raise NotImplementedError("TODO(B): exp_rectify")
 
 
+SUBSET_ORDER = ["base", "blur", "challenge", "db", "tilt", "ALL"]
+E5_CROP = "quad"   # SPEC 10: E5 cố định crop gt; dùng quad vì E4 / tune cho thấy quad hơn bbox rõ
+
+
+def _segmentation_df(cfg: dict, args: argparse.Namespace) -> pd.DataFrame:
+    """Đọc results/predictions/segmentation.csv; thiếu file hoặc khác tập ảnh của split thì chạy E0 trước.
+
+    E5, E6 chỉ gom số từ file này để mọi bảng dùng chung một lần chạy pipeline.
+    """
+    path = os.path.join(cfg["paths"]["results"], "predictions", "segmentation.csv")
+    want = {r.image_id for r in load_records(cfg, split=args.split)[: args.limit]}
+    if os.path.isfile(path):
+        df = pd.read_csv(path, dtype={"image_id": str})
+        if set(df["image_id"]) == want:
+            return df
+        print(f"{path} không khớp split={args.split} (limit={args.limit}), chạy lại E0")
+    else:
+        print(f"chưa có {path}, chạy E0 trước")
+    exp_predict(cfg, args)
+    return pd.read_csv(path, dtype={"image_id": str})
+
+
+def summarize_segmentation(df: pd.DataFrame, by: list[str]) -> list[dict]:
+    """Gom metric SPEC 9.3 theo `by` × subset, thêm dòng subset = ALL cho mỗi nhóm.
+
+    Output: list dict cột by..., subset, n, count_match, pos0_acc, pos1_6_acc, all_correct, ms_mean.
+    """
+    rows = []
+    for key, g in df.groupby(by, sort=True):
+        key = key if isinstance(key, tuple) else (key,)
+        parts = [(s, g[g["subset"] == s]) for s in SUBSET_ORDER[:-1]] + [("ALL", g)]
+        for sub, gs in parts:
+            if gs.empty:
+                continue
+            n = len(gs)
+            rows.append({**dict(zip(by, key)), "subset": sub, "n": n,
+                         "count_match": round(gs["count_match"].astype(bool).mean(), 4),
+                         "pos0_acc": round(gs["pos0_hit"].astype(bool).mean(), 4),
+                         "pos1_6_acc": round(gs["pos1_6_hits"].sum() / (6 * n), 4),
+                         "all_correct": round(gs["all_correct"].astype(bool).mean(), 4),
+                         "ms_mean": round(gs["ms"].mean(), 3)})
+    return rows
+
+
+def _print_table(rows: list[dict], cols: list[str]) -> None:
+    print("  ".join(f"{c:>12}" for c in cols))
+    for r in rows:
+        print("  ".join(f"{r[c]:>12.3f}" if isinstance(r[c], float) else f"{str(r[c]):>12}" for c in cols))
+
+
+def char_box_rows(cfg: dict, args: argparse.Namespace, bin_m: str) -> dict[tuple[str, str], dict]:
+    """SPEC 9.4: P/R/F1 theo hộp ký tự trên các biển đã gán tay (crop gt + quad, binarize bin_m).
+
+    Hộp gán tay nằm trong tọa độ biển nắn từ quad thật nên chỉ tính cho crop_source = gt.
+    Cộng dồn TP/FP/FN của mọi biển rồi mới tính P/R/F1 (micro). Output: {(segmenter, subset): {...}}.
+    """
+    labels = load_char_labels(cfg)
+    recs = [r for r in load_records(cfg, split=args.split)[: args.limit] if r.image_id in labels]
+    if not recs:
+        return {}
+    thr = get(cfg, "evaluate.char_iou_threshold", 0.5)
+    acc: dict[tuple[str, str], list[int]] = {}
+    for r in recs:
+        gray = to_gray(rectify(read_image(r.path), r.bbox, r.quad, "quad", cfg))
+        b = clean_binary(ensure_text_white(binarize_plate(gray, bin_m, cfg["binarize"].get(bin_m, {}))))
+        for sm in SEGMENTERS:
+            pred = segment(b, sm, cfg)
+            tp, fp, fn = match_detections([(c.x1, c.y1, c.x2, c.y2) for c in pred],
+                                          [(c.x1, c.y1, c.x2, c.y2) for c in labels[r.image_id]], thr)
+            for sub in (r.subset, "ALL"):
+                a = acc.setdefault((sm, sub), [0, 0, 0, 0])
+                a[0] += 1
+                a[1] += tp
+                a[2] += fp
+                a[3] += fn
+    out = {}
+    for k, (n, tp, fp, fn) in acc.items():
+        m = prf(tp, fp, fn)
+        out[k] = {"char_n": n, "char_precision": round(m["precision"], 4),
+                  "char_recall": round(m["recall"], 4), "char_f1": round(m["f1"], 4)}
+    return out
+
+
 def exp_binarize(cfg: dict, args: argparse.Namespace) -> None:
-    """E5: otsu vs adaptive trên crop gt + CCA, ghi tables/e5_binarize.csv."""
-    raise NotImplementedError("TODO(B): exp_binarize")
+    """E5: otsu vs adaptive trên crop gt + CCA, ghi tables/e5_binarize.csv.
+
+    Crop gt bằng quad (E5_CROP). Số lấy từ segmentation.csv của E0, chia theo subset.
+    """
+    df = _segmentation_df(cfg, args)
+    df = df[(df["crop_source"] == "gt") & (df["crop_method"] == E5_CROP) & (df["segmenter"] == "cca")]
+    rows = summarize_segmentation(df, ["binarize"])
+    path = os.path.join(cfg["paths"]["results"], "tables", "e5_binarize.csv")
+    write_csv(rows, path)
+    print(f"E5 split={args.split}: crop gt + {E5_CROP}, segment cca")
+    _print_table(rows, ["binarize", "subset", "n", "count_match", "pos0_acc", "pos1_6_acc", "all_correct"])
+    print(f"đã ghi {path}")
 
 
 def exp_segmentation(cfg: dict, args: argparse.Namespace) -> None:
-    """E6: cca vs projection × crop_source gt/pred (metric 9.3 + 9.4), ghi tables/e6_segmentation.csv."""
-    raise NotImplementedError("TODO(B): exp_segmentation")
+    """E6: cca vs projection × crop_source gt/pred (metric 9.3 + 9.4), ghi tables/e6_segmentation.csv.
+
+    Binarize cố định theo cfg["binarize"]["method"] (không chọn lại theo kết quả trên test),
+    crop quad. Cột char_* (SPEC 9.4) chỉ có ở crop gt và chỉ khi data/char_labels có biển của split.
+    """
+    bin_m = cfg["binarize"]["method"]
+    df = _segmentation_df(cfg, args)
+    df = df[(df["binarize"] == bin_m) & (df["crop_method"] == "quad")]
+    rows = summarize_segmentation(df, ["segmenter", "crop_source"])
+    chars = char_box_rows(cfg, args, bin_m)
+    empty = {"char_n": 0, "char_precision": None, "char_recall": None, "char_f1": None}
+    for r in rows:
+        r.update(chars.get((r["segmenter"], r["subset"]), empty) if r["crop_source"] == "gt" else empty)
+    path = os.path.join(cfg["paths"]["results"], "tables", "e6_segmentation.csv")
+    write_csv(rows, path)
+    print(f"E6 split={args.split}: binarize {bin_m}, crop quad")
+    _print_table(rows, ["segmenter", "crop_source", "subset", "n", "count_match", "pos0_acc",
+                        "pos1_6_acc", "all_correct"])
+    if chars:
+        print("SPEC 9.4 (crop gt):")
+        for (sm, sub), m in sorted(chars.items()):
+            print(f"  {sm:<11}{sub:<10} n={m['char_n']:<3} P={m['char_precision']:.3f} "
+                  f"R={m['char_recall']:.3f} F1={m['char_f1']:.3f}")
+    else:
+        print("SPEC 9.4: chưa có biển nào của split này trong data/char_labels/char_boxes.csv, cột char_* để trống")
+    print(f"đã ghi {path}")
 
 
 def exp_runtime(cfg: dict, args: argparse.Namespace) -> None:

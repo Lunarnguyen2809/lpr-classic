@@ -323,3 +323,35 @@ Khoảng cách gt → pred (0.43 → ~0.09 all_correct) là phần lỗi do đ�
 all_correct theo subset (gt + quad + adaptive + cca, cấu hình thắng trên tune): base 0.571, blur 0.071, challenge 0.107, db 0.214, tilt 0.214.
 
 Lưu ý: trên **test**, otsu + projection (0.587) cao hơn adaptive + cca (0.470), ngược với **tune** (adaptive = otsu, cca nhỉnh hơn projection). Không chọn lại cấu hình theo test; ghi vào phần thảo luận rằng chênh lệch giữa các tổ hợp nhỏ và không ổn định giữa hai tập. Khoảng cách gt → pred (0.59 → 0.14) vẫn cho thấy định vị là nguồn lỗi chính.
+
+### E5, E6 trên tập test, 2026-11-08, Bích
+
+`python experiments/run_all.py --exp binarize` và `--exp segmentation`. Cả hai gom số từ `results/predictions/segmentation.csv` (E0); thiếu file hoặc khác split thì tự chạy E0 trước. E0 đã chạy lại với code sau #14 (NARROW_ASPECT, cắt theo khe, lọc mảnh dẹt sau khi gộp). Bảng: `results/tables/e5_binarize.csv`, `e6_segmentation.csv`.
+
+**E5: otsu vs adaptive** (crop gt + quad, segment cca), all_correct:
+
+| subset | n | otsu | adaptive |
+|---|---|---|---|
+| base | 350 | **0.666** | 0.611 |
+| blur | 28 | **0.143** | 0.071 |
+| challenge | 28 | 0.143 | **0.214** |
+| db | 28 | **0.393** | 0.250 |
+| tilt | 28 | **0.286** | 0.214 |
+| ALL | 462 | **0.563** | 0.509 |
+
+Adaptive trúng vị trí nhiều hơn (pos0 0.859 vs 0.805, pos1_6 0.875 vs 0.815) nhưng sai số hộp nhiều hơn (count 0.567 vs 0.606), nên all_correct thấp hơn. Trên tune hai cách hòa (0.540 vs 0.566 sau #14). Config giữ `otsu`.
+
+**E6: cca vs projection × gt/pred** (binarize theo config = otsu, crop quad), all_correct:
+
+| subset | cca gt | projection gt | cca pred | projection pred |
+|---|---|---|---|---|
+| base | 0.666 | **0.749** | 0.171 | 0.191 |
+| blur | 0.143 | 0.214 | 0.000 | 0.036 |
+| challenge | 0.143 | 0.214 | 0.036 | 0.000 |
+| db | **0.393** | 0.250 | 0.071 | 0.036 |
+| tilt | 0.286 | 0.286 | 0.036 | 0.036 |
+| ALL | 0.563 | **0.625** | 0.139 | 0.151 |
+
+- Với otsu, projection hơn cca ở crop gt (0.625 vs 0.563, count 0.680 vs 0.606). Trên tune với otsu cũng vậy (0.596 vs 0.540), nên lần này hai tập nhất quán. Config `segment.method` vẫn là `cca`; đổi hay không thì nhóm quyết (file SHARED).
+- Khoảng cách gt → pred: 0.625 → 0.151 (projection). Lỗi tổng thể chủ yếu do định vị (bilateral top-1 R = 0.545), đúng như SPEC 9.5.
+- SPEC 9.4 (P/R/F1 theo hộp gán tay): `char_boxes.csv` chưa có biển nào nên cột `char_*` để trống. Gán xong 30 biển thì chạy lại `--exp segmentation`, không cần chạy lại E0.

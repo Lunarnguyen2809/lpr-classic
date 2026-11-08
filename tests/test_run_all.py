@@ -101,3 +101,80 @@ def test_seg_rows_consistent_columns(cfg):
         assert r["count_match"] == (r["n_boxes"] == r["n_expected"])
         if r["all_correct"]:
             assert r["count_match"] and r["pos0_hit"] and r["pos1_6_hits"] == 6
+
+
+# ---------- E5 / E6 ----------
+
+import argparse  # noqa: E402
+
+import pandas as pd  # noqa: E402
+
+
+def _seg_df() -> pd.DataFrame:
+    """2 ảnh (base, db) × đủ 16 tổ hợp; chỉ (gt, quad, otsu, cca) của base là đúng hết."""
+    rows = []
+    for iid, sub in (("base_0001", "base"), ("db_0001", "db")):
+        for src in ("gt", "pred"):
+            for cm in ("bbox", "quad"):
+                for bm in ("otsu", "adaptive"):
+                    for sm in ("cca", "projection"):
+                        ok = (iid, src, cm, bm, sm) == ("base_0001", "gt", "quad", "otsu", "cca")
+                        rows.append({"image_id": iid, "subset": sub, "crop_source": src, "crop_method": cm,
+                                     "binarize": bm, "segmenter": sm, "n_boxes": 7 if ok else 5,
+                                     "n_expected": 7, "count_match": ok, "pos0_hit": ok,
+                                     "pos1_6_hits": 6 if ok else 3, "all_correct": ok, "ms": 1.0})
+    return pd.DataFrame(rows)
+
+
+def test_summarize_segmentation_subset_and_all():
+    df = _seg_df()
+    df = df[(df.crop_source == "gt") & (df.crop_method == "quad") & (df.segmenter == "cca")]
+    rows = run_all.summarize_segmentation(df, ["binarize"])
+    otsu = {r["subset"]: r for r in rows if r["binarize"] == "otsu"}
+    assert list(otsu) == ["base", "db", "ALL"]
+    assert otsu["base"]["all_correct"] == 1.0 and otsu["db"]["all_correct"] == 0.0
+    assert otsu["ALL"]["n"] == 2 and otsu["ALL"]["all_correct"] == 0.5
+    assert otsu["ALL"]["pos1_6_acc"] == pytest.approx((6 + 3) / 12)
+
+
+@pytest.fixture
+def tmp_cfg(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(run_all, "_segmentation_df", lambda c, a: _seg_df())
+    monkeypatch.setattr(run_all, "load_char_labels", lambda c: {})
+    return {**cfg, "paths": {**cfg["paths"], "results": str(tmp_path)},
+            "binarize": {**cfg["binarize"], "method": "otsu"}}
+
+
+def test_exp_binarize_writes_table(tmp_cfg, tmp_path):
+    run_all.exp_binarize(tmp_cfg, argparse.Namespace(split="test", limit=None))
+    t = pd.read_csv(tmp_path / "tables" / "e5_binarize.csv")
+    assert set(t.binarize) == {"otsu", "adaptive"}
+    assert len(t) == 6                                     # 2 binarize × (base, db, ALL)
+    assert t[(t.binarize == "otsu") & (t.subset == "ALL")].all_correct.item() == 0.5
+
+
+def test_exp_segmentation_writes_table(tmp_cfg, tmp_path):
+    run_all.exp_segmentation(tmp_cfg, argparse.Namespace(split="test", limit=None))
+    t = pd.read_csv(tmp_path / "tables" / "e6_segmentation.csv")
+    assert len(t) == 12                                    # 2 segmenter × 2 crop_source × 3 subset
+    assert {"char_n", "char_precision", "char_recall", "char_f1"} <= set(t.columns)
+    assert t.char_precision.isna().all()                   # chưa có nhãn tay
+    row = t[(t.segmenter == "cca") & (t.crop_source == "gt") & (t.subset == "ALL")]
+    assert row.all_correct.item() == 0.5
+
+
+def test_char_box_rows_perfect_labels(cfg, monkeypatch):
+    """SPEC 9.4 với nhãn tay = hộp thật của biển tổng hợp: cả hai cách tách phải đạt F1 = 1."""
+    rec = _record()
+    img = _image(cfg)
+    gray = run_all.to_gray(run_all.rectify(img, rec.bbox, rec.quad, "quad", cfg))
+    b = run_all.clean_binary(run_all.ensure_text_white(run_all.binarize_plate(gray, "otsu", {})))
+    labels = run_all.segment(b, "cca", cfg)
+    assert len(labels) == 7
+    monkeypatch.setattr(run_all, "load_char_labels", lambda c: {rec.image_id: labels})
+    monkeypatch.setattr(run_all, "load_records", lambda c, split=None: [rec])
+    monkeypatch.setattr(run_all, "read_image", lambda p: img)
+    out = run_all.char_box_rows(cfg, argparse.Namespace(split="test", limit=None), "otsu")
+    assert out[("cca", "ALL")]["char_f1"] == pytest.approx(1.0)
+    assert out[("cca", "base")]["char_n"] == 1
+    assert out[("projection", "ALL")]["char_f1"] == pytest.approx(1.0)
