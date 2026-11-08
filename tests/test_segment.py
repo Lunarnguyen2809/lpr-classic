@@ -203,3 +203,39 @@ def test_template_intervals_pixels(cfg):
 def test_bad_method(cfg):
     with pytest.raises(ValueError):
         segment(_plate(cfg), "xyz", cfg)  # type: ignore[arg-type]
+
+
+# ---------- #14: ngưỡng gộp mảnh hẹp riêng, cắt theo khe, lọc mảnh dẹt sau khi gộp ----------
+
+def test_narrow_merge_independent_of_aspect_min(cfg):
+    """Hạ char_aspect_range min (0.10, để giữ số "1") không được làm mất luật gộp mảnh chữ Hán:
+    hai mảnh rộng 7 và 6 px (rộng/cao 0.14, 0.12) vẫn phải gộp ngay trong CCA."""
+    low = {**cfg, "segment": {**cfg["segment"], "char_aspect_range": [0.10, 1.0]}}
+    boxes = segment_cca(_plate(cfg, broken_lr=True), low)
+    assert len(boxes) == 7
+    assert position_hits(boxes, low)[0]
+
+
+def test_split_count_uses_gap():
+    """Khối 2 ký tự rộng 16 + khe 10 + 16 = 42 px: w / med = 2.6 → 3 phần (sai);
+    (w + khe) / (med + khe) = 2 phần (đúng)."""
+    boxes = [CharBox(10, 10, 26, 60), CharBox(36, 10, 52, 60), CharBox(62, 10, 104, 60),
+             CharBox(114, 10, 130, 60), CharBox(140, 10, 156, 60)]
+    out = merge_split_boxes(boxes, W, H)
+    assert len(out) == 6
+    assert [(b.x1, b.x2) for b in out[2:4]] == [(62, 83), (83, 104)]
+
+
+def test_flat_stroke_joins_char_pieces(cfg):
+    """Ký tự vỡ thành nửa trên lệch trái + nét ngang + nửa dưới lệch phải: hai nửa không chồng
+    nhau theo x, chỉ nối qua nét ngang dẹt. Lọc mảnh dẹt trước khi gộp thì mất ký tự."""
+    img = _plate(cfg)
+    cx = _centers(cfg)[4]
+    x1, x2 = cx - 8, cx + 8
+    img[Y0:Y1, x1:x2] = 0
+    img[Y0:32, x1:x1 + 6] = 255        # nửa trên, cao 22 < 0.4 × 70
+    img[33:36, x1:x2] = 255            # nét ngang dẹt
+    img[37:Y1, x1 + 10:x2] = 255       # nửa dưới, cao 23
+    boxes = segment_cca(img, cfg)
+    assert len(boxes) == 7
+    assert position_hits(boxes, cfg)[4]
