@@ -212,3 +212,36 @@ Cùng script `experiments/check_segment_all.py`, tập tune n=198.
 Tóm lại trên tune: crop **quad** chắc chắn; binarize và segment **chưa phân thắng thua** (chênh ≤ 1 biển). Không đổi config. Hằng số trong segment.py chọn trên chính tune nên số liệu hơi lạc quan; kết luận cuối dựa vào E5/E6 trên test. Điểm nghẽn lớn nhất hiện tại là metric số "1" (trần all_correct ~0.69), tiếp theo là nhóm db (tối, tương phản thấp).
 
 ## Đánh giá
+
+### E0: xuất predictions trên tập test, 2026-11-08, Bích
+
+`python experiments/run_all.py --exp predict --split test` (462 ảnh, ~1.5 phút). Ghi `results/predictions/localization.csv` (4158 dòng) và `segmentation.csv` (7392 dòng = 462 × 16), cột đúng schema SPEC 10.1 / 10.2.
+
+- localization: method `edge` × denoise {none, gaussian, median, bilateral}, mỗi ảnh tối đa top_k = 5 dòng (rank 1..5). Ảnh không có ứng viên vẫn có 1 dòng `rank = 0`, tọa độ trống, `is_tp = False`. `edge_svm` chưa có vì `hog_svm.py` còn TODO. `ms` = thời gian `localize_edge` cả ảnh, lặp lại ở mọi rank.
+- segmentation: crop_source {gt, pred} × crop_method {bbox, quad} × binarize {otsu, adaptive} × segmenter {cca, projection}. Crop pred = top-1 của edge + denoise trong config (bilateral), quad pred theo `rectify.quad_method` (approxpoly). Không có ứng viên thì dòng pred có `n_boxes = 0`, mọi cột đúng/sai = False. `ms` = binarize + segment, không gồm crop.
+- **position_hits vẫn là metric cũ (IoU-x ≥ 0.5)** vì PR #6 (luật tâm cho số "1") chưa merge. Merge xong chạy lại lệnh trên là có file mới.
+
+Số tổng hợp để Châu Anh đối chiếu khi triage (KHÔNG dùng để chọn tham số, đây là tập test):
+
+| denoise | P | R | F1 | R@5 | không có ứng viên | ms/ảnh |
+|---|---|---|---|---|---|---|
+| none | 0.376 | 0.314 | 0.342 | 0.370 | 76 | 26 |
+| gaussian | 0.466 | 0.435 | 0.450 | 0.535 | 31 | 26 |
+| median | 0.441 | 0.394 | 0.416 | 0.496 | 49 | 31 |
+| bilateral | 0.593 | 0.545 | 0.568 | 0.667 | 37 | 109 |
+
+Recall top-1 (bilateral) theo subset: base 0.609, blur 0.357, challenge 0.429, db 0.321, tilt 0.286.
+
+| crop_source | crop | binarize | segment | count | pos0 | pos1_6 | all_correct |
+|---|---|---|---|---|---|---|---|
+| gt | quad | otsu | cca | 0.569 | 0.786 | 0.766 | 0.381 |
+| gt | quad | otsu | projection | 0.665 | 0.825 | 0.797 | 0.426 |
+| gt | quad | adaptive | cca | 0.539 | 0.790 | 0.793 | 0.364 |
+| gt | quad | adaptive | projection | 0.576 | 0.816 | 0.793 | 0.361 |
+| gt | bbox | adaptive | cca | 0.450 | 0.504 | 0.616 | 0.173 |
+| pred | quad | adaptive | projection | 0.290 | 0.411 | 0.353 | 0.095 |
+| pred | bbox | otsu | projection | 0.214 | 0.221 | 0.276 | 0.054 |
+
+(Dòng bbox / pred chỉ ghi tổ hợp có all_correct cao nhất; đủ 16 tổ hợp xem trực tiếp trong CSV.)
+
+Khoảng cách gt → pred (0.43 → ~0.09 all_correct) là phần lỗi do định vị (SPEC 9.5): top-1 chỉ đúng 54.5% ảnh, nên phần lớn lỗi tổng thể nằm ở bước định vị chứ không phải tách ký tự.
