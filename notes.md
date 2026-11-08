@@ -150,7 +150,22 @@ Cả tập tune (n=198), so với bản đầu xóa mọi thành phần rộng >
 
 Thay đổi: khối đặc rộng (nhiều ký tự dính) không còn bị xóa như viền mà giữ lại để `merge_split_boxes` cắt. Hằng số chọn trên chính tập tune, chưa đo test.
 
-**Vấn đề với số "1" (cần nhóm quyết, chưa sửa):** trên 150 biển base, vị trí chứa "1" chỉ đúng 3/56 (5%) so với 889/994 (89%) ở ký tự khác. Nguyên nhân chính không phải CCA mà là metric SPEC 9.3: hộp "1" rộng ~9 px, khuôn rộng 22.5 px nên IoU trục x ≈ 0.4 < 0.5 dù hộp nằm đúng giữa khuôn. Phụ: 11% nét "1" có rộng/cao < 0.15 (trung vị 0.21) nên bị `char_aspect_range` loại. Hướng sửa có thể: đổi position_hits sang "tâm hộp nằm trong khoảng khuôn" hoặc IoU so với hộp hẹp hơn (đổi định nghĩa SPEC 9.3), và/hoặc hạ aspect min xuống ~0.1 (config SHARED).
+**Vấn đề với số "1" (đã sửa ở mục "Sửa metric position_hits" bên dưới):** trên 150 biển base, vị trí chứa "1" chỉ đúng 3/56 (5%) so với 889/994 (89%) ở ký tự khác. Nguyên nhân chính không phải CCA mà là metric SPEC 9.3: hộp "1" rộng ~9 px, khuôn rộng 22.5 px nên IoU trục x ≈ 0.4 < 0.5 dù hộp nằm đúng giữa khuôn. Phụ: 11% nét "1" có rộng/cao < 0.15 (trung vị 0.21) nên bị `char_aspect_range` loại. Hướng sửa có thể: đổi position_hits sang "tâm hộp nằm trong khoảng khuôn" hoặc IoU so với hộp hẹp hơn (đổi định nghĩa SPEC 9.3), và/hoặc hạ aspect min xuống ~0.1 (config SHARED).
+
+### Sửa metric position_hits cho số "1" (luật tâm), 2026-11-08
+
+Đổi `position_hits` (SPEC 9.3): trúng nếu (a) IoU-x ≥ 0.5, HOẶC (b) hộp hẹp (0 < rộng ≤ 0.6× rộng khuôn) có tâm trong khuôn [x1, x2). Hằng số `evaluate.char_center_max_width_ratio` = 0.6 trong config. Luật (b) chỉ dành cho hộp hẹp như số "1"; hộp rộng bình thường vẫn phải đạt IoU 0.5 (ngưỡng 1.5× ban đầu nới cả hộp bình thường lệch tâm ~11 px và cho mảnh vỡ trúng). Đồng thời hạ `segment.char_aspect_range[0]` 0.15 → 0.10. Đo trên tune n=198, pipeline: nắn quad GT -> otsu -> cca. Chạy lại: `PYTHONPATH=src python experiments/measure_segment_metric.py [--aspect-min 0.12]`.
+
+| cấu hình | all_correct | count | pos0 | pos1_6 | "1" trúng (base) |
+|---|---|---|---|---|---|
+| trước (main): IoU, aspect 0.15 | 0.364 | 0.540 | 0.773 | 0.760 | 3/56 |
+| luật tâm ratio 0.6, aspect 0.15 | 0.490 | 0.540 | 0.788 | 0.812 | 45/56 |
+| luật tâm ratio 0.6, aspect 0.12 | 0.505 | 0.545 | 0.788 | 0.820 | 52/56 |
+| luật tâm ratio 0.6, aspect 0.10 (chọn) | 0.515 | 0.556 | 0.788 | 0.820 | 53/56 |
+
+Chọn 0.10 vì all_correct cao hơn 0.12 (0.515 vs 0.505). Hằng số chọn trên chính tập tune, chưa đo test. Lưu ý: pos0/pos1_6 là "có hộp nào trúng khuôn" (không ghép 1-1), nên mảnh vỡ cũng có thể được tính trúng; all_correct được chặn bởi count == 7 nên ít bị ảnh hưởng.
+
+**Cho Bích:** `_merge_narrow_neighbors` trong `segment.py` dùng chung `char_aspect_range[0]` làm ngưỡng "mảnh hẹp", nên hạ aspect min cũng đổi ngưỡng gộp mảnh hẹp. Gợi ý tách thành hằng số riêng (reviewer đo chênh lệch không đáng kể: count 0.545 vs 0.551). Em không sửa `segment.py`.
 
 ### Kiểm tra khuôn `char_template_mm`
 
@@ -210,6 +225,28 @@ Cùng script `experiments/check_segment_all.py`, tập tune n=198.
 **Quad thắng rõ**: 50 biển chỉ quad đúng hết, 6 biển chỉ bbox đúng (sign test p < 0.001); thắng ở mọi subset, chênh nhất ở tilt và db (bbox count = 0). Lý do: bbox là hình chữ nhật thẳng ôm biển nghiêng nên lẫn nền và viền, chữ bị xiên và lệch khỏi khuôn cố định (base_0002 bbox: đủ 7 hộp nhưng chỉ 3/7 vị trí). Ca bbox thắng (base_0072, 0155) là do quad GT hơi rộng nên mép viền thành hộp thừa.
 
 Tóm lại trên tune: crop **quad** chắc chắn; binarize và segment **chưa phân thắng thua** (chênh ≤ 1 biển). Không đổi config. Hằng số trong segment.py chọn trên chính tune nên số liệu hơi lạc quan; kết luận cuối dựa vào E5/E6 trên test. Điểm nghẽn lớn nhất hiện tại là metric số "1" (trần all_correct ~0.69), tiếp theo là nhóm db (tối, tương phản thấp).
+
+### Chạy lại sau khi merge #6 (luật tâm, aspect min 0.10), 2026-11-08, Bích
+
+Cùng script, tập tune n=198, metric mới. Bảng trên giữ lại để so trước/sau.
+
+| so sánh | cấu hình | count | pos0 | pos1_6 | all_correct | số "1" trúng | đúng riêng |
+|---|---|---|---|---|---|---|---|
+| binarize (cca, quad) | otsu | 0.556 | 0.788 | 0.820 | 0.515 | 0.88 | 32 |
+| | adaptive | 0.566 | 0.818 | **0.896** | 0.515 | 0.88 | 32 |
+| segment (adaptive, quad) | **cca** | **0.566** | 0.818 | 0.896 | **0.515** | 0.88 | 18 |
+| | projection | 0.545 | **0.828** | **0.906** | 0.490 | 0.89 | 13 |
+| crop (adaptive, cca) | bbox | 0.409 | 0.475 | 0.641 | 0.192 | 0.61 | 11 |
+| | **quad** | **0.566** | **0.818** | **0.896** | **0.515** | 0.88 | 75 |
+
+Theo subset (adaptive + cca + quad): base 0.613, blur 0.250, challenge 0.167, db 0.083, tilt 0.333.
+
+Nhận xét:
+- Luật tâm sửa đúng chỗ: số "1" trúng 0.05 → 0.88, all_correct 0.369 → 0.515.
+- **Quad vẫn thắng rõ** (75 vs 11 biển).
+- **Otsu vs adaptive vẫn hòa** (0.515 = 0.515, 32 vs 32 biển). Adaptive hơn ở pos1_6 (0.896 vs 0.820) nhưng không thành all_correct vì sai số hộp.
+- **CCA nhỉnh hơn projection** (0.515 vs 0.490, 18 vs 13 biển, sign test p ≈ 0.47): chưa đủ để gọi là thắng. Projection trúng vị trí nhiều hơn (pos1_6 0.906) nhưng hay thừa/thiếu hộp (count 0.545) do cắt "H" thành hai nét.
+- Không đổi config. Điểm nghẽn còn lại: nhóm db (all 0.083) và count_match (~0.56, tức gần nửa biển vẫn sai số hộp).
 
 ## Đánh giá
 
