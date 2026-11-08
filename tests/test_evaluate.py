@@ -96,3 +96,58 @@ def test_char_box_prf():
     assert r["precision"] == pytest.approx(2 / 3)
     assert r["recall"] == pytest.approx(2 / 3)
     assert r["f1"] == pytest.approx(2 / 3)
+
+
+def _slot(cfg, i=2):
+    lo, hi = template_intervals(cfg)[i]
+    return lo, hi, (lo + hi) / 2
+
+
+def test_position_hits_narrow_centered_box_hits(cfg):
+    """Số "1" rộng 9 px đặt giữa khuôn: IoU ≈ 0.4 < 0.5 nhưng vẫn trúng nhờ luật tâm."""
+    lo, hi, c = _slot(cfg)
+    box = CharBox(round(c - 4.5), 5, round(c + 4.5), 60)
+    assert iou_1d((box.x1, box.x2), (lo, hi)) < 0.5
+    assert position_hits([box], cfg) == [False, False, True, False, False, False, False]
+
+
+def test_position_hits_wide_merged_blob_centered_misses(cfg):
+    """Khối dính rộng 2.5× khuôn, tâm trùng tâm khuôn: IoU < 0.5 và vượt ngưỡng hộp hẹp, không trúng."""
+    lo, hi, c = _slot(cfg)
+    w = (hi - lo) * 2.5
+    box = CharBox(round(c - w / 2), 5, round(c + w / 2), 60)
+    assert iou_1d((box.x1, box.x2), (lo, hi)) < 0.5
+    assert not position_hits([box], cfg)[2]
+
+
+def test_position_hits_normal_width_off_center_misses(cfg):
+    """Hộp ~22 px (bình thường) lệch tâm ~10 px: IoU < 0.5 và không phải hộp hẹp, nên trượt."""
+    lo, hi, c = _slot(cfg)
+    box = CharBox(round(lo + 10), 5, round(lo + 10 + 22), 60)
+    assert iou_1d((box.x1, box.x2), (lo, hi)) < 0.5
+    assert lo <= (box.x1 + box.x2) / 2 < hi
+    assert not position_hits([box], cfg)[2]
+
+
+def test_position_hits_zero_width_box_misses(cfg):
+    """Hộp rộng 0 đặt giữa khuôn không trúng."""
+    _, _, c = _slot(cfg)
+    box = CharBox(round(c), 5, round(c), 60)
+    assert not position_hits([box], cfg)[2]
+
+
+def test_position_hits_narrow_off_slot_misses(cfg):
+    """Hộp hẹp nằm ngoài khuôn (tâm lệch ra ngoài [x1, x2)) không trúng."""
+    lo, hi, _ = _slot(cfg)
+    box = CharBox(round(hi) + 1, 5, round(hi) + 10, 60)
+    assert not position_hits([box], cfg)[2]
+
+
+def test_position_hits_iou_still_hits(cfg):
+    """Hộp rộng 1.6× khuôn nhưng IoU ≥ 0.5 vẫn trúng theo luật IoU (khuôn nằm trọn trong hộp: 1/1.6 = 0.625)."""
+    lo, hi, c = _slot(cfg)
+    w = (hi - lo) * 1.6
+    box = CharBox(round(c - w / 2), 5, round(c + w / 2), 60)
+    cfg2 = {**cfg, "evaluate": {**cfg["evaluate"], "char_iou_threshold": 0.5}}
+    assert iou_1d((box.x1, box.x2), (lo, hi)) >= 0.5
+    assert position_hits([box], cfg2)[2]

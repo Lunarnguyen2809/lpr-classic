@@ -427,7 +427,7 @@ binarize:
 segment:
   method: cca                              # cca | projection
   char_height_range: [0.4, 0.9]            # so với chiều cao biển
-  char_aspect_range: [0.15, 1.0]           # rộng / cao
+  char_aspect_range: [0.10, 1.0]           # rộng / cao
   min_area: 30
   projection: {min_gap: 2, min_width: 4}
   # Vị trí khuôn ký tự (mm, biển 440×140): rộng 45, cách 12, sau ký tự thứ 2 cách 34.
@@ -437,6 +437,7 @@ segment:
 evaluate:
   iou_threshold: 0.5
   char_iou_threshold: 0.5
+  char_center_max_width_ratio: 0.6         # luật tâm hộp hẹp, SPEC 9.3
 ```
 
 Tham số `localize` đã chỉnh trên tập tune, chi tiết ở `notes.md`.
@@ -629,7 +630,7 @@ CLI: `python experiments/run_all.py --exp <tên>|all [--split test] [--limit N] 
 
 ### 9.3 Tách ký tự (tự động trên toàn bộ tập test)
 - **count_match**: số hộp ký tự = độ dài chuỗi biển (7).
-- **position_hits**: biển CCPD có bố cục chuẩn, nên trên ảnh nắn 220×70, ký tự thứ *i* nằm trong một khoảng ngang cố định (`char_template_mm` × 0.5). Vị trí *i* đúng nếu tồn tại một hộp có IoU theo trục x ≥ 0.5 với khoảng đó.
+- **position_hits**: biển CCPD có bố cục chuẩn, nên trên ảnh nắn 220×70, ký tự thứ *i* nằm trong một khoảng ngang cố định (`char_template_mm` × 0.5). Vị trí *i* đúng nếu tồn tại một hộp thoả một trong hai: (a) IoU theo trục x ≥ 0.5 với khoảng đó; (b) hộp hẹp (rộng > 0 và ≤ 0.6 × rộng khuôn, `evaluate.char_center_max_width_ratio`) có tâm x nằm trong khoảng [x1, x2) của khuôn. Luật (b) chỉ áp dụng cho hộp hẹp để ký tự mảnh như số "1" (~9 px, khuôn rộng 22.5 px, IoU ≈ 0.4) vẫn trúng khi nằm đúng giữa khuôn; hộp có độ rộng bình thường vẫn phải đạt IoU theo (a). Khối dính nhiều ký tự bị loại bởi luật (a) (IoU thấp).
 - **pos0_acc**: tỉ lệ biển đúng vị trí 0 (ký tự Hán, dễ vỡ nét).
 - **pos1_6_acc**: tỉ lệ vị trí đúng trung bình trên 6 ký tự sau.
 - **all_correct**: count_match và đúng cả 7 vị trí.
@@ -691,7 +692,7 @@ Hai file này phải xuất **trước trưa ngày 8** để A làm triage lỗi
 
 - Chỉ sửa file mình sở hữu. Cần đổi file SHARED hoặc file của người kia thì mở issue hoặc nhắn trước.
 - Nhánh git: `a/<tên-việc>`, `b/<tên-việc>`, merge vào `main` khi chạy được trên 5 ảnh và `pytest` pass.
-- Commit message: `[A] localize: thêm lọc fill_ratio`.
+- Commit message: `rectify: nắn biển bằng homography`.
 - Mọi tham số đã thử ghi vào `notes.md` kèm kết quả.
 
 ---
