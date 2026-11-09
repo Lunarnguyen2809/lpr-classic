@@ -231,15 +231,45 @@ def test_summarize_localization_groups_by_method():
     assert all(r["n"] == 3 for r in rows if r["subset"] == "ALL")
 
 
-def test_pick_best_uses_only_tune_and_breaks_ties_by_speed():
+def test_pick_best_uses_only_tune_and_breaks_ties_by_fixed_order():
     rows = [{"split": "tune", "subset": "ALL", "f1": 0.5, "ms_mean": 30.0, "denoise": "a"},
             {"split": "tune", "subset": "ALL", "f1": 0.5, "ms_mean": 10.0, "denoise": "b"},
             {"split": "tune", "subset": "ALL", "f1": 0.4, "ms_mean": 1.0, "denoise": "c"},
             {"split": "tune", "subset": "base", "f1": 0.9, "ms_mean": 1.0, "denoise": "d"},
             {"split": "test", "subset": "ALL", "f1": 0.99, "ms_mean": 1.0, "denoise": "e"}]
-    assert run_all.pick_best(rows, "denoise") == "b"
+    # hòa F1 giữa a và b: không xét ms_mean, theo thứ tự cố định
+    assert run_all.pick_best(rows, "denoise") == "a"                      # mặc định: thứ tự xuất hiện
+    assert run_all.pick_best(rows, "denoise", order=["b", "a", "c"]) == "b"
+    assert run_all.pick_best(rows, "denoise", order=["c", "a", "b"]) == "a"
+    assert run_all.pick_best(list(reversed(rows)), "denoise", order=["a", "b"]) == "a"   # không phụ thuộc thứ tự dòng
     with pytest.raises(ValueError):
         run_all.pick_best([r for r in rows if r["split"] == "test"], "denoise")
+
+
+def _chosen_df(n_tune: int) -> pd.DataFrame:
+    rows = []
+    for split, n in (("tune", n_tune), ("test", 7)):
+        for sub in ("ALL", "base"):
+            for dn in ("none", "bilateral"):
+                rows.append({"split": split, "subset": sub, "denoise": dn, "n": n,
+                             "chosen": dn == "bilateral"})
+    return pd.DataFrame(rows)
+
+
+def test_choose_from_table_requires_matching_tune_n():
+    df = _chosen_df(198)
+    assert run_all.choose_from_table(df, "denoise", 198) == ("bilateral", 198)
+    assert run_all.choose_from_table(df, "denoise", 20) is None            # chạy với --limit khác: không dùng lại
+    assert run_all.choose_from_table(df.drop(columns=["split"]), "denoise", 198) is None
+    assert run_all.choose_from_table(df[df["split"] == "test"], "denoise", 198) is None   # thiếu tune
+    assert run_all.choose_from_table(df.assign(chosen=False), "denoise", 198) is None
+
+
+def test_records_rejects_qual_and_empty(cfg):
+    with pytest.raises(SystemExit, match="qual"):
+        run_all._records(cfg, "qual", None, "E2")
+    with pytest.raises(SystemExit, match="không có record"):
+        run_all._records(cfg, "tune", 0, "E3")
 
 
 def _seg_row(src, cm, bm="otsu", sm="cca", ok=True) -> dict:

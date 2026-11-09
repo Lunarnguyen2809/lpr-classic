@@ -665,6 +665,8 @@ Chênh lệch giữa hai cột là phần lỗi do định vị gây ra.
 
 Mọi bảng đều có thêm dòng chia theo `subset`.
 
+Bảng E2/E3 có thêm cột `split` (tune/test) và `chosen` (True ở giá trị chọn theo F1 ALL trên tune, hòa thì theo thứ tự cố định `DENOISES`/`edge` trước `edge_svm`); E4 có cột `crop_source` ∈ {`gt`, `pred`, `pred_tp`} (`pred_tp` = chỉ ảnh top-1 định vị đúng IoU ≥ ngưỡng).
+
 ### 10.1 Schema `results/predictions/localization.csv`
 
 `image_id, subset, method, denoise, rank, x1, y1, x2, y2, score, iou, is_tp, ms`
