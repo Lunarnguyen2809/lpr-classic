@@ -22,13 +22,45 @@ MERGE_MAX_WIDTH = 1.4      # hộp sau khi gộp rộng ≤ 1.4 × trung vị
 SPLIT_MIN_WIDTH = 1.7      # hộp rộng ≥ 1.7 × trung vị bị cắt
 SPLIT_MAX_PARTS = 3
 
+# Ngưỡng cho chiếu ngang (split_lines) và chiếu dọc (segment_projection).
+LINE_TEXT_ROW = 0.03       # hàng có > 3% pixel trắng là hàng có chữ
+LINE_FRAME_ROW = 0.85      # hàng > 85% trắng là viền biển
+LINE_MAX_GAP = 0.05        # nối hai đoạn hàng cách nhau ≤ 5% chiều cao
+LINE_MIN_HEIGHT = 0.2      # dòng chữ cao ≥ 20% chiều cao biển
+PROJ_COL_RATIO = 0.1       # cột có ≥ 10% chiều cao dòng là trắng mới là cột chữ (bỏ vệt nhiễu mảnh)
+VALLEY_SEARCH = 0.3        # tìm thung lũng trong ± 0.3 × trung vị quanh vị trí cắt dự kiến
+
+
+def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
+    """Các đoạn liên tiếp True trong mảng 1 chiều, dạng (đầu, cuối) với cuối không bao gồm."""
+    d = np.diff(np.concatenate([[0], mask.astype(np.int8), [0]]))
+    return list(zip(np.flatnonzero(d == 1).tolist(), np.flatnonzero(d == -1).tolist()))
+
+
+def _merge_runs(runs: list[tuple[int, int]], max_gap: int) -> list[tuple[int, int]]:
+    """Nối các đoạn cách nhau ≤ max_gap phần tử trống."""
+    out: list[tuple[int, int]] = []
+    for a, b in runs:
+        if out and a - out[-1][1] <= max_gap:
+            out[-1] = (out[-1][0], b)
+        else:
+            out.append((a, b))
+    return out
+
 
 def split_lines(binary: np.ndarray) -> list[tuple[int, int]]:
     """Chiếu ngang để tìm các dòng chữ.
 
     Input: ảnh nhị phân (ký tự = 255). Output: list khoảng (y0, y1), y1 không bao gồm.
+    Hàng có > 3% pixel trắng là hàng chữ, hàng > 85% trắng là viền (bỏ). Nối đoạn cách nhau
+    ≤ 5% chiều cao, bỏ dòng thấp hơn 20% chiều cao. Không có dòng nào thì trả [(0, h)].
     """
-    raise NotImplementedError("TODO(B): split_lines")
+    h, w = binary.shape[:2]
+    prof = np.count_nonzero(binary, axis=1) / max(w, 1)
+    text_rows = (prof > LINE_TEXT_ROW) & (prof < LINE_FRAME_ROW)
+    runs = _merge_runs(_runs(text_rows), max_gap=max(1, int(LINE_MAX_GAP * h)))
+    lines = [(a, b) for a, b in runs if b - a >= LINE_MIN_HEIGHT * h]
+    return lines or [(0, h)]
 
 
 def _components(binary: np.ndarray) -> list[list[int]]:
@@ -127,12 +159,88 @@ def segment_cca(binary: np.ndarray, cfg: dict) -> list[CharBox]:
     return sorted(boxes, key=lambda b: b.x1)
 
 
+def _without_noise(binary: np.ndarray) -> np.ndarray:
+    """Bản sao ảnh đã xóa viền rỗng, mảnh viền ngang, ốc vít (cùng luật với CCA)."""
+    ph, pw = binary.shape[:2]
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    keep = np.zeros(n, bool)
+    for i in range(1, n):
+        x, y, w, h, area = (int(v) for v in stats[i])
+        keep[i] = not _is_frame_or_noise([x, y, x + w, y + h, area], pw, ph)
+    return np.where(keep[lab], 255, 0).astype(np.uint8)
+
+
+def _cut_at_valleys(a: int, b: int, prof: np.ndarray, med: float) -> list[tuple[int, int]]:
+    """Cắt dải cột [a, b) rộng ≥ 1.7 × trung vị thành k phần tại cột ít pixel trắng nhất
+    quanh mỗi vị trí cắt dự kiến (± 0.3 × trung vị)."""
+    w = b - a
+    k = min(SPLIT_MAX_PARTS, int(round(w / med))) if med > 0 and w >= SPLIT_MIN_WIDTH * med else 1
+    if k <= 1:
+        return [(a, b)]
+    cuts, start = [], a
+    for j in range(1, k):
+        guess = a + j * w / k
+        lo = max(start + 1, int(guess - VALLEY_SEARCH * med))
+        hi = min(b - 1, int(guess + VALLEY_SEARCH * med) + 1)
+        if hi <= lo:
+            continue
+        c = lo + int(np.argmin(prof[lo:hi]))
+        cuts.append(c)
+        start = c
+    edges = [a, *cuts, b]
+    return [(edges[i], edges[i + 1]) for i in range(len(edges) - 1) if edges[i + 1] > edges[i]]
+
+
 def segment_projection(binary: np.ndarray, cfg: dict) -> list[CharBox]:
     """Tách ký tự bằng chiếu dọc, dùng cfg["segment"]["projection"] (min_gap, min_width).
 
-    Output: list CharBox.
+    Các bước: bỏ viền / ốc vít → split_lines → với mỗi dòng: profile cột (số pixel trắng),
+    cột ≥ 10% chiều cao dòng là cột chữ → nối dải cách nhau < min_gap, bỏ dải hẹp hơn
+    min_width → dải rộng (chữ dính) cắt tại thung lũng của profile → co hộp theo y →
+    lọc chiều cao, tỉ lệ, diện tích như CCA.
+    Output: list CharBox (line = chỉ số dòng).
     """
-    raise NotImplementedError("TODO(B): segment_projection")
+    seg = cfg["segment"]
+    pj = seg["projection"]
+    h_lo, h_hi = seg["char_height_range"]
+    a_lo, a_hi = seg["char_aspect_range"]
+    ph = binary.shape[0]
+
+    clean = _without_noise(binary)
+    lines = split_lines(clean)
+    ref_h = ph / len(lines)          # 1 dòng: so với chiều cao biển; nhiều dòng: chia đều
+    boxes: list[CharBox] = []
+    for li, (y0, y1) in enumerate(lines):
+        band = clean[y0:y1]
+        prof = np.count_nonzero(band, axis=0)
+        cols = prof >= max(1.0, PROJ_COL_RATIO * (y1 - y0))
+        runs = _merge_runs(_runs(cols), max_gap=int(pj["min_gap"]) - 1)
+        # dải hẹp (mảnh ký tự Hán vỡ trái/phải) nối với dải kề nếu khe nhỏ, cùng luật như CCA
+        narrow_w, gap = a_lo * (y1 - y0), NARROW_MAX_GAP * ph
+        merged: list[tuple[int, int]] = []
+        for a, b in runs:
+            if merged and a - merged[-1][1] <= gap and min(b - a, merged[-1][1] - merged[-1][0]) < narrow_w:
+                merged[-1] = (merged[-1][0], b)
+            else:
+                merged.append((a, b))
+        runs = [(a, b) for a, b in merged if b - a >= pj["min_width"]]
+        if not runs:
+            continue
+        med = float(np.median([b - a for a, b in runs]))
+        for a0, b0 in runs:
+            for a, b in _cut_at_valleys(a0, b0, prof, med):
+                rows = np.flatnonzero(np.count_nonzero(band[:, a:b], axis=1))
+                if rows.size == 0:
+                    continue
+                by0, by1 = y0 + int(rows[0]), y0 + int(rows[-1]) + 1
+                h, w = by1 - by0, b - a
+                area = int(np.count_nonzero(band[:, a:b]))
+                if area < seg["min_area"] or not (h_lo * ref_h <= h <= h_hi * ref_h):
+                    continue
+                if not (a_lo <= w / h <= a_hi):
+                    continue
+                boxes.append(CharBox(a, by0, b, by1, li))
+    return sorted(boxes, key=lambda bx: (bx.line, bx.x1))
 
 
 def merge_split_boxes(boxes: list[CharBox], plate_w: int, plate_h: int) -> list[CharBox]:
