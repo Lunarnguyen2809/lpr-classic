@@ -248,4 +248,25 @@ Nhận xét:
 - **CCA nhỉnh hơn projection** (0.515 vs 0.490, 18 vs 13 biển, sign test p ≈ 0.47): chưa đủ để gọi là thắng. Projection trúng vị trí nhiều hơn (pos1_6 0.906) nhưng hay thừa/thiếu hộp (count 0.545) do cắt "H" thành hai nét.
 - Không đổi config. Điểm nghẽn còn lại: nhóm db (all 0.083) và count_match (~0.56, tức gần nửa biển vẫn sai số hộp).
 
+### Issue #14: tách ngưỡng gộp mảnh hẹp + 2 gợi ý phụ, 2026-11-08, Bích
+
+Ba thay đổi trong `segment.py`, đo trên tune n=198, crop quad GT, metric luật tâm:
+1. **`NARROW_ASPECT = 0.15`** riêng cho luật gộp mảnh hẹp (cả CCA và projection), không dùng chung `char_aspect_range[0]` (đã hạ xuống 0.10 ở #6).
+2. **Số phần cắt tính theo khe:** `round((w + khe) / (trung vị + khe))` thay cho `round(w / trung vị)`, khe = trung vị khe giữa các hộp kề. Áp cho `merge_split_boxes` và `_cut_at_valleys`.
+3. **Lọc mảnh dẹt sau khi gộp mảnh chồng dọc** (chỉ CCA): nét ngang chữ Hán được gộp vào ký tự trước, mảnh dẹt đứng một mình mới bị bỏ.
+
+all_correct (trong ngoặc: số biển đúng thêm / mất so với chỉ làm bước 1):
+
+| binarize + segment | trước #14 (dùng chung 0.10) | (1) | (1)+(2) | (1)+(3) | (1)+(2)+(3), **chọn** |
+|---|---|---|---|---|---|
+| otsu + cca | 0.515 | 0.515 | 0.540 (+5/−0) | 0.515 | **0.540** (+5/−0) |
+| otsu + projection | 0.566 | 0.596 | 0.596 | 0.596 | **0.596** |
+| adaptive + cca | 0.515 | 0.535 | 0.551 (+3/−0) | 0.551 (+4/−1) | **0.566** (+7/−1) |
+| adaptive + projection | 0.490 | 0.530 | 0.530 | 0.530 | **0.530** |
+
+- Bước 1 tự nó đã có lợi: hạ min 0.10 trước đây cũng hạ ngưỡng "mảnh hẹp", nên mảnh chữ Hán rộng/cao 0.10–0.15 không còn được gộp. Projection được lợi nhiều nhất (+0.03 / +0.04).
+- Bước 2 và 3 chỉ tác động lên CCA. Projection đã cắt ở thung lũng và không có bước gộp mảnh chồng.
+- Không tổ hợp nào giảm all_correct. Chênh nhỏ (p ≈ 0.07 cho adaptive + cca, +7/−1), hằng số chọn trên tune, kết luận cuối vẫn dựa vào test.
+- Test mới: cả 3 test đều fail với code cũ và pass với code mới.
+
 ## Đánh giá
