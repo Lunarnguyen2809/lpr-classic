@@ -192,3 +192,95 @@ def test_color_table_rank_per_subset():
     assert by[("base", "S")]["rank"] == 1 and by[("db", "gray")]["rank"] == 1
     assert by[("ALL", "S")]["mean_separability"] == pytest.approx(0.55)
     assert by[("ALL", "S")]["n"] == 2 and by[("base", "S")]["std"] == 0.0
+
+
+# ---------- E2 / E3 / E4 / E7: hàm dựng bảng (không cần dataset) ----------
+
+def _loc_df() -> pd.DataFrame:
+    """3 ảnh: a (base) top-1 đúng; b (base) top-1 sai, rank 3 đúng; c (db) không có ứng viên."""
+    def row(iid, sub, rank, tp, ms):
+        return {"image_id": iid, "subset": sub, "method": "edge", "denoise": "none", "rank": rank,
+                "is_tp": tp, "ms": ms}
+    rows = [row("a", "base", 1, True, 10.0), row("a", "base", 2, False, 10.0),
+            row("b", "base", 1, False, 20.0), row("b", "base", 2, False, 20.0), row("b", "base", 3, True, 20.0),
+            row("c", "db", 0, False, 30.0)]
+    return pd.DataFrame(rows)
+
+
+def test_summarize_localization_counts_and_recall_at_k():
+    rows = run_all.summarize_localization(_loc_df(), ["method"])
+    by_sub = {r["subset"]: r for r in rows}
+    assert list(by_sub) == ["base", "db", "ALL"]
+    base, db, all_ = by_sub["base"], by_sub["db"], by_sub["ALL"]
+    assert (base["tp"], base["fp"], base["fn"]) == (1, 1, 1)
+    assert base["precision"] == 0.5 and base["recall"] == 0.5
+    assert (base["recall_at_1"], base["recall_at_3"], base["recall_at_5"]) == (0.5, 1.0, 1.0)
+    # ảnh không có ứng viên: FN nhưng không phải FP
+    assert (db["tp"], db["fp"], db["fn"]) == (0, 0, 1)
+    assert (all_["n"], all_["tp"], all_["fp"], all_["fn"]) == (3, 1, 1, 2)
+    assert all_["precision"] == 0.5 and all_["recall"] == pytest.approx(1 / 3, abs=1e-4)
+    assert all_["recall_at_3"] == pytest.approx(2 / 3, abs=1e-4)
+    assert all_["ms_mean"] == 20.0
+
+
+def test_summarize_localization_groups_by_method():
+    df = _loc_df()
+    df2 = df.assign(method="edge_svm", is_tp=~df["is_tp"].astype(bool) & (df["rank"] >= 1))
+    rows = run_all.summarize_localization(pd.concat([df, df2]), ["method"])
+    assert {r["method"] for r in rows} == {"edge", "edge_svm"}
+    assert all(r["n"] == 3 for r in rows if r["subset"] == "ALL")
+
+
+def test_pick_best_uses_only_tune_and_breaks_ties_by_speed():
+    rows = [{"split": "tune", "subset": "ALL", "f1": 0.5, "ms_mean": 30.0, "denoise": "a"},
+            {"split": "tune", "subset": "ALL", "f1": 0.5, "ms_mean": 10.0, "denoise": "b"},
+            {"split": "tune", "subset": "ALL", "f1": 0.4, "ms_mean": 1.0, "denoise": "c"},
+            {"split": "tune", "subset": "base", "f1": 0.9, "ms_mean": 1.0, "denoise": "d"},
+            {"split": "test", "subset": "ALL", "f1": 0.99, "ms_mean": 1.0, "denoise": "e"}]
+    assert run_all.pick_best(rows, "denoise") == "b"
+    with pytest.raises(ValueError):
+        run_all.pick_best([r for r in rows if r["split"] == "test"], "denoise")
+
+
+def _seg_row(src, cm, bm="otsu", sm="cca", ok=True) -> dict:
+    return {"image_id": "base_1", "subset": "base", "crop_source": src, "crop_method": cm, "binarize": bm,
+            "segmenter": sm, "n_boxes": 7, "n_expected": 7, "count_match": ok, "pos0_hit": ok,
+            "pos1_6_hits": 6, "all_correct": ok, "ms": 1.0}
+
+
+def test_rectify_image_rows_filters_and_attaches_corner():
+    seg = [_seg_row(s, c, b, m) for s in ("gt", "pred") for c in ("bbox", "quad")
+           for b in ("otsu", "adaptive") for m in ("cca", "projection")]
+    rows = run_all.rectify_image_rows(seg, {"bbox": 8.0, "quad": 5.0}, loc_ok=True)
+    assert len(rows) == 6   # gt×2 + pred×2 + pred_tp×2, chỉ otsu + cca
+    ce = {(r["crop_source"], r["crop_method"]): r["corner_error"] for r in rows}
+    assert ce[("pred", "bbox")] == 8.0 and ce[("pred_tp", "quad")] == 5.0
+    assert ce[("gt", "quad")] is None
+    # định vị sai: không có pred_tp
+    rows = run_all.rectify_image_rows(seg, {}, loc_ok=False)
+    assert len(rows) == 4 and not any(r["crop_source"] == "pred_tp" for r in rows)
+
+
+def test_rectify_table_corner_stats_and_all_row():
+    df = pd.DataFrame(run_all.rectify_image_rows(
+        [_seg_row("pred", "quad"), _seg_row("pred", "bbox")], {"bbox": 10.0, "quad": 4.0}, True)
+        + [{**_seg_row("pred", "quad"), "image_id": "db_1", "subset": "db", "corner_error": None,
+            "count_match": False, "all_correct": False}])
+    rows = run_all.rectify_table(df)
+    q = {(r["crop_source"], r["subset"]): r for r in rows if r["crop_method"] == "quad"}
+    assert q[("pred", "ALL")]["n"] == 2 and q[("pred", "ALL")]["corner_n"] == 1
+    assert q[("pred", "ALL")]["corner_mean"] == 4.0 and q[("pred", "db")]["corner_mean"] is None
+    assert q[("pred_tp", "ALL")]["n"] == 1 and q[("pred", "ALL")]["count_match"] == 0.5
+
+
+def test_runtime_table_mean_p95_and_subset():
+    rows = [{"image_id": f"i{i}", "subset": "base" if i < 3 else "db", "step": "total", "ms": float(i * 10)}
+            for i in range(1, 5)]
+    rows.append({"image_id": "i1", "subset": "base", "step": "segment", "ms": 2.0})
+    t = run_all.runtime_table(pd.DataFrame(rows))
+    assert [r["step"] for r in t].index("segment") < [r["step"] for r in t].index("total")  # theo RUNTIME_STEPS
+    tot = {r["subset"]: r for r in t if r["step"] == "total"}
+    assert list(tot) == ["base", "db", "ALL"]
+    assert tot["ALL"]["n"] == 4 and tot["ALL"]["ms_mean"] == 25.0
+    assert tot["ALL"]["ms_p95"] == pytest.approx(38.5)
+    assert tot["base"]["n"] == 2 and tot["db"]["ms_mean"] == 35.0

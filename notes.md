@@ -461,3 +461,72 @@ Adaptive trúng vị trí nhiều hơn (pos0 0.859 vs 0.805, pos1_6 0.875 vs 0.8
 - Với otsu, projection hơn cca ở crop gt (0.625 vs 0.563, count 0.680 vs 0.606). Trên tune với otsu cũng vậy (0.596 vs 0.540), nên lần này hai tập nhất quán. Config `segment.method` vẫn là `cca`; đổi hay không thì nhóm quyết (file SHARED).
 - Khoảng cách gt → pred: 0.625 → 0.151 (projection). Lỗi tổng thể chủ yếu do định vị (bilateral top-1 R = 0.545), đúng như SPEC 9.5.
 - SPEC 9.4 (P/R/F1 theo hộp gán tay): `char_boxes.csv` chưa có biển nào nên cột `char_*` để trống. Gán xong 30 biển thì chạy lại `--exp segmentation`, không cần chạy lại E0.
+
+### run_all E2/E3/E4/E7 (#11), 2026-11-10
+
+Chạy: `PYTHONPATH=src python experiments/run_all.py --exp filters|localization|rectify|runtime` (mặc định `--split test`, không `--limit`; cần `models/svm.joblib` từ `experiments/train_hog_svm.py` chạy sau khi merge #22). Mỗi bảng có thêm dòng chia theo `subset` và dòng `ALL`. Phụ thuộc #22 (localize_edge đa tỉ lệ) và #21 (hog_svm); số dưới đây là của bản đã gộp cả hai.
+
+Kỷ luật tune/test: E2 và E3 chạy trên tune (198 ảnh) lẫn test (462 ảnh), cột `split` phân biệt. Cột `chosen` đánh dấu giá trị chọn **chỉ theo F1 ALL trên tune** (hòa thì chọn ms thấp hơn); E3 đọc denoise đã chọn từ `e2_filters.csv`, E4 đọc method từ `e3_localization.csv`. Số test chỉ để báo cáo.
+
+**E2 bộ lọc** (`tables/e2_filters.csv`, localize_edge, dòng ALL; chọn: bilateral)
+
+| split | denoise | P | R | F1 | R@5 | ms/ảnh |
+|---|---|---|---|---|---|---|
+| tune | none | 0.598 | 0.571 | 0.584 | 0.657 | 401 |
+| tune | gaussian | 0.630 | 0.601 | 0.615 | 0.682 | 397 |
+| tune | median | 0.637 | 0.611 | 0.624 | 0.697 | 452 |
+| tune | bilateral | 0.775 | 0.748 | 0.761 | 0.828 | 433 |
+| test | none | 0.610 | 0.576 | 0.592 | 0.645 | 383 |
+| test | gaussian | 0.647 | 0.615 | 0.630 | 0.712 | 366 |
+| test | median | 0.616 | 0.584 | 0.600 | 0.699 | 398 |
+| test | bilateral | 0.729 | 0.682 | 0.705 | 0.792 | 415 |
+
+Bilateral hơn rõ trên cả hai tập (F1 test 0.705 vs 0.592-0.630). Sau #22 chênh thời gian giữa các bộ lọc gần như biến mất vì ba lượt close đa tỉ lệ + NMS chiếm phần lớn (~300+ ms); máy lúc đo đang tải nặng (nhiều tiến trình khác) nên ms chỉ để so tương đối.
+
+**E3 định vị** (`tables/e3_localization.csv`, denoise = bilateral; chọn: edge_svm). Test:
+
+| method | subset | n | P | R | F1 | R@1 | R@3 | R@5 |
+|---|---|---|---|---|---|---|---|---|
+| edge | base | 350 | 0.771 | 0.751 | 0.761 | 0.751 | 0.871 | 0.874 |
+| edge | blur | 28 | 0.750 | 0.643 | 0.692 | 0.643 | 0.643 | 0.643 |
+| edge | challenge | 28 | 0.619 | 0.464 | 0.531 | 0.464 | 0.500 | 0.500 |
+| edge | db | 28 | 0.409 | 0.321 | 0.360 | 0.321 | 0.429 | 0.429 |
+| edge | tilt | 28 | 0.500 | 0.429 | 0.462 | 0.429 | 0.571 | 0.571 |
+| edge | ALL | 462 | 0.729 | 0.682 | 0.705 | 0.682 | 0.790 | 0.792 |
+| edge_svm | base | 350 | 0.856 | 0.834 | 0.845 | 0.834 | 0.874 | 0.874 |
+| edge_svm | blur | 28 | 0.667 | 0.571 | 0.615 | 0.571 | 0.643 | 0.643 |
+| edge_svm | challenge | 28 | 0.619 | 0.464 | 0.531 | 0.464 | 0.500 | 0.500 |
+| edge_svm | db | 28 | 0.455 | 0.357 | 0.400 | 0.357 | 0.429 | 0.429 |
+| edge_svm | tilt | 28 | 0.583 | 0.500 | 0.538 | 0.500 | 0.571 | 0.571 |
+| edge_svm | ALL | 462 | 0.799 | 0.747 | 0.772 | 0.747 | 0.792 | 0.792 |
+
+Tune ALL: edge F1 0.761 (R@5 0.828), edge_svm F1 0.818 (R@5 0.828). SVM không thêm ứng viên, chỉ xếp lại: R@5 hai bên bằng nhau (0.792 test), cải thiện hoàn toàn nằm ở R@1 (0.682 -> 0.747 test, +30 ảnh, chủ yếu base +29). Trần là R@5 ≈ 0.79: khoảng 21% ảnh test không có ứng viên đúng trong top-5 (db 57%, challenge 50%, tilt 43% thiếu), nên muốn tăng tiếp phải sửa sinh ứng viên chứ không phải xếp hạng. Các nhóm ngoài base chỉ 28 ảnh, chênh ±1-2 ảnh (0.036/ảnh) nên đừng đọc chênh lệch nhỏ ở blur/db/tilt. ms edge_svm = localize_edge + chấm SVM (~+15 ms). Top-1 không lọc theo `score_threshold` (giữ Recall@k).
+
+**E4 nắn** (`tables/e4_rectify.csv`, test, binarize Otsu + CCA, định vị = edge_svm + bilateral). `crop_source`: `gt` crop từ bbox/quad thật, `pred` top-1 trên mọi ảnh (định vị sai tính là hỏng), `pred_tp` chỉ 345 ảnh top-1 đúng IoU ≥ 0.5. corner_error (px ảnh gốc) chỉ tính trên 345 ảnh đó; với crop bbox, quad ngầm là 4 góc bbox pred.
+
+| crop_source | crop | n | corner mean / median | count_match | pos0_acc | pos1_6_acc | all_correct |
+|---|---|---|---|---|---|---|---|
+| gt | bbox | 462 | - | 0.452 | 0.571 | 0.597 | 0.262 |
+| gt | quad | 462 | - | 0.606 | 0.805 | 0.815 | 0.563 |
+| pred | bbox | 462 | 25.0 / 19.4 | 0.262 | 0.266 | 0.390 | 0.093 |
+| pred | quad | 462 | 16.3 / 13.8 | 0.403 | 0.496 | 0.515 | 0.195 |
+| pred_tp | bbox | 345 | 25.0 / 19.4 | 0.348 | 0.330 | 0.499 | 0.125 |
+| pred_tp | quad | 345 | 16.3 / 13.8 | 0.519 | 0.629 | 0.642 | 0.261 |
+
+Warp quad thắng crop bbox ở mọi cột và mọi nhóm: corner_error 25.0 -> 16.3 px, all_correct (pred_tp) 0.125 -> 0.261, và với crop gt 0.262 -> 0.563 (cô lập hẳn khỏi lỗi định vị). Khác biệt lớn nhất ở tilt (corner 68.0 vs 28.9 px, n = 14), đúng kỳ vọng vì bbox không bù được độ nghiêng. Chênh giữa `gt` và `pred_tp` (all_correct quad 0.563 vs 0.261) cho thấy lỗi định vị dù IoU ≥ 0.5 vẫn làm hỏng nửa số biển ở bước tách ký tự: quad pred lệch ~16 px so với quad thật.
+
+**E7 thời gian** (`tables/e7_runtime.csv`, test n = 462, pipeline edge_svm + bilateral + quad + otsu + cca, một tiến trình, ms/ảnh, dòng ALL)
+
+| bước | n | mean | p95 |
+|---|---|---|---|
+| preprocess (resize, gray, CLAHE, denoise) | 462 | 201.1 | 463.3 |
+| localize_other (Sobel, morph đa tỉ lệ, lọc, NMS) | 462 | 214.9 | 493.2 |
+| hog_svm | 462 | 15.2 | 31.2 |
+| quad | 432 | 3.0 | 6.0 |
+| rectify | 432 | 1.0 | 2.7 |
+| binarize | 432 | 0.25 | 0.77 |
+| segment | 432 | 1.3 | 2.9 |
+| total_edge (không SVM) | 462 | 421.1 | 703.5 |
+| total | 462 | 436.3 | 732.3 |
+
+Mọi bước sau định vị cộng lại < 8 ms; định vị chiếm ~97% thời gian, trong đó tiền xử lý ~46% (bilateral d = 11 trên ảnh 800 px) và Sobel + morph đa tỉ lệ ~49%; SVM chỉ ~3.5%. 30 ảnh không có ứng viên nên n = 432 ở các bước sau quad. Tilt chậm nhất (total 537 ms), db nhanh nhất (386 ms). **Lưu ý đo:** máy chạy nhiều tiến trình Python khác cùng lúc nên số tuyệt đối cao hơn nhiều so với đo ở E0 (bilateral ~109 ms) và p95 rộng; dùng tỉ lệ giữa các bước, đo lại trên máy rảnh nếu cần số tuyệt đối cho báo cáo.
