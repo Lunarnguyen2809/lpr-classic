@@ -142,9 +142,78 @@ def exp_predict(cfg: dict, args: argparse.Namespace) -> None:
     print(f"đã ghi {len(loc_rows)} dòng localization.csv, {len(seg_rows)} dòng segmentation.csv vào {out_dir}")
 
 
+COLOR_CHANNELS = ["gray", "H", "S", "V", "L", "a", "b"]
+COLOR_BINS = 64
+
+
+def color_table(sep: pd.DataFrame) -> list[dict]:
+    """Gom độ tách theo kênh × subset (+ ALL), xếp hạng trong từng subset (1 = tách tốt nhất).
+
+    Input: DataFrame cột image_id, subset, channel, separability.
+    """
+    rows = []
+    for sub in SUBSET_ORDER:
+        g = sep if sub == "ALL" else sep[sep["subset"] == sub]
+        if g.empty:
+            continue
+        agg = g.groupby("channel")["separability"].agg(["count", "mean", "std"])
+        agg = agg.sort_values("mean", ascending=False)
+        for rank, (ch, a) in enumerate(agg.iterrows(), 1):
+            rows.append({"channel": ch, "subset": sub, "n": int(a["count"]),
+                         "mean_separability": round(a["mean"], 4),
+                         "std": round(0.0 if pd.isna(a["std"]) else a["std"], 4), "rank": rank})
+    return rows
+
+
 def exp_color(cfg: dict, args: argparse.Namespace) -> None:
-    """E1: so sánh độ tách của các kênh màu, ghi tables/e1_color.csv và figures/e1_hist.png."""
-    raise NotImplementedError("TODO(B): exp_color")
+    """E1: so sánh độ tách của các kênh màu, ghi tables/e1_color.csv và figures/e1_hist.png.
+
+    Luôn chạy trên split tune: E1 dùng để chọn kênh cho tiền xử lý, chọn trên test là rò dữ liệu.
+    Độ tách = khoảng cách Bhattacharyya giữa histogram trong bbox biển và phần ảnh còn lại.
+    Hình: histogram trung bình trong / ngoài biển của từng kênh.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from lpr.color_analysis import CHANNEL_RANGE, DEFAULT_RANGE, channel_histograms, separability
+
+    if args.split != "tune":
+        print(f"E1 bỏ qua --split {args.split}, luôn dùng tune")
+    recs = load_records(cfg, split="tune")[: args.limit]
+    sums = {ch: [np.zeros(COLOR_BINS), np.zeros(COLOR_BINS)] for ch in COLOR_CHANNELS}
+    rows = []
+    for r in recs:
+        for ch, (h_in, h_out) in channel_histograms(read_image(r.path), r.bbox, COLOR_CHANNELS, COLOR_BINS).items():
+            sums[ch][0] += h_in
+            sums[ch][1] += h_out
+            rows.append({"image_id": r.image_id, "subset": r.subset, "channel": ch,
+                         "separability": separability(h_in, h_out)})
+    table = color_table(pd.DataFrame(rows))
+    tpath = os.path.join(cfg["paths"]["results"], "tables", "e1_color.csv")
+    write_csv(table, tpath)
+
+    mean_all = {t["channel"]: t["mean_separability"] for t in table if t["subset"] == "ALL"}
+    fig, axes = plt.subplots(2, 4, figsize=(16, 7))
+    for ax, ch in zip(axes.flat, sorted(COLOR_CHANNELS, key=lambda c: -mean_all[c])):
+        lo, hi = CHANNEL_RANGE.get(ch, DEFAULT_RANGE)
+        x = np.linspace(lo, hi, COLOR_BINS, endpoint=False) + (hi - lo) / COLOR_BINS / 2
+        ax.plot(x, sums[ch][0] / len(recs), label="trong biển", color="tab:blue")
+        ax.plot(x, sums[ch][1] / len(recs), label="ngoài biển", color="tab:gray")
+        ax.set_title(f"{ch}  (D = {mean_all[ch]:.3f})")
+        ax.set_xlim(lo, hi)
+    axes.flat[-1].axis("off")
+    axes.flat[0].legend()
+    fig.suptitle(f"E1: histogram trung bình trong / ngoài biển, tune n={len(recs)}, xếp theo độ tách giảm dần")
+    fig.tight_layout()
+    fpath = os.path.join(cfg["paths"]["results"], "figures", "e1_hist.png")
+    os.makedirs(os.path.dirname(fpath), exist_ok=True)
+    fig.savefig(fpath, dpi=110)
+    plt.close(fig)
+
+    print(f"E1 split=tune n={len(recs)}, bins={COLOR_BINS}")
+    _print_table([t for t in table if t["subset"] == "ALL"], ["rank", "channel", "mean_separability", "std"])
+    print(f"đã ghi {tpath} và {fpath}")
 
 
 def exp_filters(cfg: dict, args: argparse.Namespace) -> None:

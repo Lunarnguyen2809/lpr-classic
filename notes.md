@@ -2,6 +2,30 @@
 
 Ghi lại mọi tham số đã thử kèm kết quả (ngày, người thử, cấu hình, metric).
 
+## Hệ màu
+
+### E1: độ tách biển / nền theo kênh màu, 2026-11-08, Bích
+
+`python experiments/run_all.py --exp color` (luôn dùng tune n=198, ~20 giây). Độ tách = khoảng cách Bhattacharyya D = sqrt(1 − Σ sqrt(p·q)) giữa histogram 64 bin trong bbox biển và phần ảnh còn lại; 0 = giống hệt, 1 = không chồng lấn. Bảng `results/tables/e1_color.csv`, hình `results/figures/e1_hist.png`.
+
+| hạng | kênh | base | blur | challenge | db | tilt | **ALL** (std) |
+|---|---|---|---|---|---|---|---|
+| 1 | b (Lab) | 0.687 | 0.629 | 0.670 | 0.481 | 0.466 | **0.657** (0.130) |
+| 2 | H (HSV) | 0.681 | 0.621 | 0.697 | 0.500 | 0.462 | **0.654** (0.141) |
+| 3 | S | 0.525 | 0.558 | 0.569 | 0.385 | 0.387 | 0.513 (0.135) |
+| 4 | V | 0.485 | 0.537 | 0.527 | 0.496 | 0.358 | 0.484 (0.121) |
+| 5 | a | 0.502 | 0.414 | 0.451 | 0.328 | 0.347 | 0.474 (0.129) |
+| 6 | gray | 0.474 | 0.495 | 0.552 | 0.451 | 0.370 | 0.472 (0.106) |
+| 7 | L | 0.465 | 0.491 | 0.548 | 0.468 | 0.357 | 0.465 (0.112) |
+
+Nhận xét:
+- **b và H tách tốt nhất (~0.65), S kế tiếp (0.51); gray, L, V, a gần như hòa (~0.47).** Biển CCPD màu xanh dương: trong Lab xanh dương nằm ở b < 128 (phía xanh), trong HSV dồn vào H ≈ 100–120, nên hai kênh này gom gọn vùng biển và lệch khỏi nền. Gray / L chỉ đo độ sáng, mà biển xanh đậm có độ sáng lẫn với thân xe, đường.
+- **Ổn định theo số bin:** đo lại với 32 và 128 bin, 3 hạng đầu không đổi (b ≈ H > S). Bốn kênh cuối đổi chỗ cho nhau, chênh < 0.02, coi như hòa.
+- **Theo subset:** db và tilt tách kém nhất ở mọi kênh (biển tối hoặc chói, bbox nghiêng ôm cả nền). Trên db, V ≈ H (0.50) vì biển tối làm màu mất bão hòa.
+- **Hình histogram:** H ngoài biển có đỉnh lớn ở 0 (pixel xám/trắng, S ≈ 0 nên H không xác định → 0). Gray / L / V có răng cưa đều giữa các bin kề nhau ở cả hai đường: do lượng tử hóa khi giải nén JPEG và đổi hệ màu, không phải do biển; không đổi thứ hạng ở trên.
+- **Hệ quả cho pipeline:** `localize_edge` hiện dùng gray (Sobel-x trên ảnh xám). Kênh b hoặc H có thể giúp lọc ứng viên theo màu (biển xanh). Nhưng biển VN nền trắng / vàng, nên đây là đặc trưng riêng của CCPD, cần ghi vào phần hạn chế. Đề xuất cho Châu Anh (#10): thử thêm độ đo "tỉ lệ pixel xanh" (H trong [95, 135], S đủ cao) khi chấm điểm ứng viên. `rectify.approxpoly` đang làm việc tương tự.
+- Hạn chế: "ngoài biển" là toàn ảnh còn lại, nên độ tách phản ánh biển so với toàn cảnh, không phải so với vùng ngay sát biển. Trong bbox có cả ký tự trắng và viền nên histogram trong biển có hai đỉnh.
+
 ## Tiền xử lý
 
 2026-11-05, tune (n=198), cấu hình localize = B + close [25,5] (fill 0.35, dens 0.10), chỉ đổi `preprocess.resize_width`:
