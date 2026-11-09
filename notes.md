@@ -270,3 +270,88 @@ all_correct (trong ngoặc: số biển đúng thêm / mất so với chỉ làm
 - Test mới: cả 3 test đều fail với code cũ và pass với code mới.
 
 ## Đánh giá
+
+### E0: xuất predictions trên tập test, 2026-11-08, Bích
+
+`python experiments/run_all.py --exp predict --split test` (462 ảnh, ~1.5 phút). Ghi `results/predictions/localization.csv` (4158 dòng) và `segmentation.csv` (7392 dòng = 462 × 16), cột đúng schema SPEC 10.1 / 10.2.
+
+- localization: method `edge` × denoise {none, gaussian, median, bilateral}, mỗi ảnh tối đa top_k = 5 dòng (rank 1..5). Ảnh không có ứng viên vẫn có 1 dòng `rank = 0`, tọa độ trống, `is_tp = False`. `edge_svm` chưa có vì `hog_svm.py` còn TODO. `ms` = thời gian `localize_edge` cả ảnh, lặp lại ở mọi rank.
+- segmentation: crop_source {gt, pred} × crop_method {bbox, quad} × binarize {otsu, adaptive} × segmenter {cca, projection}. Crop pred = top-1 của edge + denoise trong config (bilateral), quad pred theo `rectify.quad_method` (approxpoly). Không có ứng viên thì dòng pred có `n_boxes = 0`, mọi cột đúng/sai = False. `ms` = binarize + segment, không gồm crop.
+- Lần chạy đầu dùng metric cũ (IoU-x ≥ 0.5). **Đã chạy lại sau khi merge #6** (luật tâm, aspect min 0.10): file CSV hiện tại là bản mới, số mới ở bảng cuối mục này.
+
+Số tổng hợp để Châu Anh đối chiếu khi triage (KHÔNG dùng để chọn tham số, đây là tập test):
+
+| denoise | P | R | F1 | R@5 | không có ứng viên | ms/ảnh |
+|---|---|---|---|---|---|---|
+| none | 0.376 | 0.314 | 0.342 | 0.370 | 76 | 26 |
+| gaussian | 0.466 | 0.435 | 0.450 | 0.535 | 31 | 26 |
+| median | 0.441 | 0.394 | 0.416 | 0.496 | 49 | 31 |
+| bilateral | 0.593 | 0.545 | 0.568 | 0.667 | 37 | 109 |
+
+Recall top-1 (bilateral) theo subset: base 0.609, blur 0.357, challenge 0.429, db 0.321, tilt 0.286.
+
+Tách ký tự, **metric cũ** (lần chạy đầu, giữ để so):
+
+| crop_source | crop | binarize | segment | count | pos0 | pos1_6 | all_correct |
+|---|---|---|---|---|---|---|---|
+| gt | quad | otsu | cca | 0.569 | 0.786 | 0.766 | 0.381 |
+| gt | quad | otsu | projection | 0.665 | 0.825 | 0.797 | 0.426 |
+| gt | quad | adaptive | cca | 0.539 | 0.790 | 0.793 | 0.364 |
+| gt | quad | adaptive | projection | 0.576 | 0.816 | 0.793 | 0.361 |
+| gt | bbox | adaptive | cca | 0.450 | 0.504 | 0.616 | 0.173 |
+| pred | quad | adaptive | projection | 0.290 | 0.411 | 0.353 | 0.095 |
+| pred | bbox | otsu | projection | 0.214 | 0.221 | 0.276 | 0.054 |
+
+(Dòng bbox / pred chỉ ghi tổ hợp có all_correct cao nhất; đủ 16 tổ hợp xem trực tiếp trong CSV.)
+
+Khoảng cách gt → pred (0.43 → ~0.09 all_correct) là phần lỗi do định vị (SPEC 9.5): top-1 chỉ đúng 54.5% ảnh, nên phần lớn lỗi tổng thể nằm ở bước định vị chứ không phải tách ký tự.
+
+**Chạy lại sau khi merge #6** (metric luật tâm, `char_aspect_range` min 0.10), cùng lệnh. Định vị không đổi (bilateral top-1 R = 0.545). Tách ký tự:
+
+| crop_source | crop | binarize | segment | count | pos0 | pos1_6 | all_correct |
+|---|---|---|---|---|---|---|---|
+| gt | quad | otsu | cca | 0.556 | 0.792 | 0.814 | 0.513 |
+| gt | quad | otsu | projection | 0.643 | 0.829 | 0.867 | **0.587** |
+| gt | quad | adaptive | cca | 0.528 | 0.820 | 0.875 | 0.470 |
+| gt | quad | adaptive | projection | 0.524 | 0.870 | 0.910 | 0.474 |
+| gt | bbox | adaptive | cca | 0.457 | 0.558 | 0.662 | 0.249 |
+| gt | bbox | otsu | cca | 0.444 | 0.556 | 0.597 | 0.249 |
+| pred | quad | otsu | projection | 0.281 | 0.418 | 0.370 | 0.141 |
+| pred | quad | adaptive | projection | 0.279 | 0.459 | 0.433 | 0.139 |
+| pred | bbox | otsu | cca | 0.216 | 0.212 | 0.306 | 0.069 |
+
+all_correct theo subset (gt + quad + adaptive + cca, cấu hình thắng trên tune): base 0.571, blur 0.071, challenge 0.107, db 0.214, tilt 0.214.
+
+Lưu ý: trên **test**, otsu + projection (0.587) cao hơn adaptive + cca (0.470), ngược với **tune** (adaptive = otsu, cca nhỉnh hơn projection). Không chọn lại cấu hình theo test; ghi vào phần thảo luận rằng chênh lệch giữa các tổ hợp nhỏ và không ổn định giữa hai tập. Khoảng cách gt → pred (0.59 → 0.14) vẫn cho thấy định vị là nguồn lỗi chính.
+
+### E5, E6 trên tập test, 2026-11-08, Bích
+
+`python experiments/run_all.py --exp binarize` và `--exp segmentation`. Cả hai gom số từ `results/predictions/segmentation.csv` (E0); thiếu file hoặc khác split thì tự chạy E0 trước. E0 đã chạy lại với code sau #14 (NARROW_ASPECT, cắt theo khe, lọc mảnh dẹt sau khi gộp). Bảng: `results/tables/e5_binarize.csv`, `e6_segmentation.csv`.
+
+**E5: otsu vs adaptive** (crop gt + quad, segment cca), all_correct:
+
+| subset | n | otsu | adaptive |
+|---|---|---|---|
+| base | 350 | **0.666** | 0.611 |
+| blur | 28 | **0.143** | 0.071 |
+| challenge | 28 | 0.143 | **0.214** |
+| db | 28 | **0.393** | 0.250 |
+| tilt | 28 | **0.286** | 0.214 |
+| ALL | 462 | **0.563** | 0.509 |
+
+Adaptive trúng vị trí nhiều hơn (pos0 0.859 vs 0.805, pos1_6 0.875 vs 0.815) nhưng sai số hộp nhiều hơn (count 0.567 vs 0.606), nên all_correct thấp hơn. Trên tune hai cách hòa (0.540 vs 0.566 sau #14). Config giữ `otsu`.
+
+**E6: cca vs projection × gt/pred** (binarize theo config = otsu, crop quad), all_correct:
+
+| subset | cca gt | projection gt | cca pred | projection pred |
+|---|---|---|---|---|
+| base | 0.666 | **0.749** | 0.171 | 0.191 |
+| blur | 0.143 | 0.214 | 0.000 | 0.036 |
+| challenge | 0.143 | 0.214 | 0.036 | 0.000 |
+| db | **0.393** | 0.250 | 0.071 | 0.036 |
+| tilt | 0.286 | 0.286 | 0.036 | 0.036 |
+| ALL | 0.563 | **0.625** | 0.139 | 0.151 |
+
+- Với otsu, projection hơn cca ở crop gt (0.625 vs 0.563, count 0.680 vs 0.606). Trên tune với otsu cũng vậy (0.596 vs 0.540), nên lần này hai tập nhất quán. Config `segment.method` vẫn là `cca`; đổi hay không thì nhóm quyết (file SHARED).
+- Khoảng cách gt → pred: 0.625 → 0.151 (projection). Lỗi tổng thể chủ yếu do định vị (bilateral top-1 R = 0.545), đúng như SPEC 9.5.
+- SPEC 9.4 (P/R/F1 theo hộp gán tay): `char_boxes.csv` chưa có biển nào nên cột `char_*` để trống. Gán xong 30 biển thì chạy lại `--exp segmentation`, không cần chạy lại E0.
