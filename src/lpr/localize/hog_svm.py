@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from sklearn.svm import LinearSVC
 
 NEG_IOU_MAX = 0.3          # ứng viên/vùng ngẫu nhiên có IoU với bbox thật < ngưỡng này mới là mẫu âm
-RANDOM_ASPECT = (2.0, 6.0)  # tỉ lệ rộng/cao của vùng ngẫu nhiên (cùng dải với aspect_range của edge)
+RANDOM_ASPECT = (2.0, 6.0)  # mặc định khi không truyền aspect; build_patch_dataset lấy từ cfg["localize"]["aspect_range"]
 RANDOM_WIDTH_FRAC = (0.08, 0.45)  # rộng vùng ngẫu nhiên so với rộng ảnh
 RANDOM_TRIES = 30
 
@@ -65,15 +65,16 @@ def _crop(gray: np.ndarray, bbox: BBox) -> np.ndarray | None:
     return gray[y1:y2, x1:x2]
 
 
-def _random_boxes(gt: BBox, shape: tuple[int, int], n: int, rng: np.random.Generator) -> list[BBox]:
-    """Sinh tối đa n vùng ngẫu nhiên dạng chữ nhật ngang, IoU với gt < NEG_IOU_MAX."""
+def _random_boxes(gt: BBox, shape: tuple[int, int], n: int, rng: np.random.Generator,
+                  aspect: tuple[float, float] = RANDOM_ASPECT) -> list[BBox]:
+    """Sinh tối đa n vùng ngẫu nhiên dạng chữ nhật ngang (tỉ lệ rộng/cao trong aspect), IoU với gt < NEG_IOU_MAX."""
     ih, iw = shape
     out: list[BBox] = []
     for _ in range(RANDOM_TRIES * max(n, 1)):
         if len(out) >= n:
             break
         bw = int(rng.uniform(*RANDOM_WIDTH_FRAC) * iw)
-        bh = int(bw / rng.uniform(*RANDOM_ASPECT))
+        bh = int(bw / rng.uniform(*aspect))
         if bw < 8 or bh < 4 or bw >= iw or bh >= ih:
             continue
         x1 = int(rng.integers(0, iw - bw + 1))
@@ -98,6 +99,7 @@ def build_patch_dataset(records: list[PlateRecord], cfg: dict) -> tuple[np.ndarr
         raise ValueError(f"build_patch_dataset chỉ nhận split tune, gặp {len(bad)} record khác: {bad[:3]}")
     n_neg = int(cfg["hog_svm"]["neg_per_pos"])
     seed = int(cfg.get("seed", 42))
+    aspect = tuple(cfg["localize"]["aspect_range"])  # cùng dải với localize_edge
     feats: list[np.ndarray] = []
     labels: list[int] = []
     for i, r in enumerate(records):
@@ -115,7 +117,7 @@ def build_patch_dataset(records: list[PlateRecord], cfg: dict) -> tuple[np.ndarr
             if iou(c.bbox, r.bbox) < NEG_IOU_MAX:
                 neg_boxes.append(c.bbox)
         rng = np.random.default_rng(seed + i)
-        neg_boxes += _random_boxes(r.bbox, gray.shape[:2], n_neg - len(neg_boxes), rng)
+        neg_boxes += _random_boxes(r.bbox, gray.shape[:2], n_neg - len(neg_boxes), rng, aspect)
         for b in neg_boxes:
             patch = _crop(gray, b)
             if patch is not None:

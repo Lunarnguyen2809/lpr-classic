@@ -75,6 +75,12 @@ python experiments/run_all.py --exp all
 PYTHONPATH=src python experiments/train_hog_svm.py --eval-splits tune test
 ```
 
+Đo recall ứng viên của `localize_edge` theo subset (issue #10, mặc định tune; `--split test` chỉ dùng một lần cho cấu hình đã chốt):
+
+```bash
+PYTHONPATH=src python experiments/measure_localize_recall.py
+```
+
 Kết quả nằm trong `results/` (predictions, tables, figures, failures).
 
 ## Phân công file
@@ -93,5 +99,6 @@ Kết quả nằm trong `results/` (predictions, tables, figures, failures).
 | `src/lpr/evaluate.py`, `tests/test_evaluate.py` | B |
 | `experiments/run_all.py`, `notebooks/01_color_spaces.ipynb` | B |
 | `experiments/train_hog_svm.py`, `tests/test_hog_svm.py` | A |
+| `experiments/measure_localize_recall.py` | synaamin |
 
 Chỉ sửa file mình sở hữu. Muốn đổi file SHARED hoặc chữ ký hàm thì sửa SPEC trước và báo người kia. Tham số đã thử ghi vào [notes.md](notes.md).

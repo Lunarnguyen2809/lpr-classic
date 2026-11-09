@@ -101,3 +101,40 @@ def test_debug_steps(cfg):
         assert k in steps.images
     assert steps.images["candidates"].shape[:2] == steps.images["resized"].shape[:2]
     assert isinstance(cands, list)
+
+
+def _gap_plate_img(gap: int = 40) -> np.ndarray:
+    """Biển có khoảng trống rộng giữa hai cụm ký tự: kernel close mặc định không nối được."""
+    img = np.full((400, 720, 3), 200, np.uint8)
+    plate = np.full((62, 260, 3), 255, np.uint8)
+    for x in list(range(10, 100, 22)) + list(range(100 + gap, 250, 22)):
+        cv2.rectangle(plate, (x, 10), (x + 8, 52), (0, 0, 0), -1)
+    img[200:262, 230:490] = plate
+    return img
+
+
+def test_multiscale_close_recovers_fragmented_plate(cfg):
+    gt = (230, 200, 490, 262)
+    img = _gap_plate_img()
+    cfg["localize"]["extra_close_kernels"] = []
+    single = localize_edge(img, cfg)
+    cfg["localize"]["extra_close_kernels"] = [[13, 3], [61, 9]]
+    multi = localize_edge(img, cfg)
+    best = lambda cs: max((iou(c.bbox, gt) for c in cs), default=0.0)  # noqa: E731
+    assert best(multi) >= 0.5
+    assert best(multi) >= best(single)
+
+
+def test_multiscale_nms_no_duplicates(cfg):
+    cfg["localize"]["extra_close_kernels"] = [[13, 3], [33, 7], [45, 9]]
+    cands = localize_edge(_plate_img(), cfg)
+    for i, a in enumerate(cands):
+        for b in cands[i + 1:]:
+            assert iou(a.bbox, b.bbox) <= cfg["localize"]["nms_iou"] + 1e-6
+    assert [c.score for c in cands] == sorted((c.score for c in cands), reverse=True)
+    assert len(cands) <= cfg["localize"]["top_k"]
+
+
+def test_extra_kernels_optional(cfg):
+    del cfg["localize"]["extra_close_kernels"]
+    assert max(iou(c.bbox, BOX) for c in localize_edge(_plate_img(), cfg)) >= 0.5
