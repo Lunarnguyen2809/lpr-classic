@@ -54,6 +54,29 @@ Kết quả chốt theo nhóm (tune):
 
 Nhận xét: nới ngưỡng fill/density là bước tăng lớn nhất (mặt nạ biển thật chỉ lấp ~0.5, density ~0.2). Close ngang 21-29 rộng tốt hơn 17. Nhóm tilt và db yếu: tilt do mask nghiêng làm minAreaRect rộng ra, db do ngược sáng/chói. Chưa tune trên test.
 
+### hog_svm (#9)
+
+`localize/hog_svm.py` chấm lại ứng viên của `localize_edge` bằng HOG + LinearSVC (SPEC 8.7). Train/đo: `PYTHONPATH=src python experiments/train_hog_svm.py --eval-splits tune test` (lưu `models/svm.joblib`, gitignore). Cấu hình: patch 128×32, 9 hướng, cell 8×8, block 2×2 (D = 1620), C = 1.0, seed 42.
+
+Dữ liệu: **chỉ split tune** (n=198 ảnh), 198 dương (crop bbox thật) + 594 âm (neg_per_pos = 3: ứng viên sai của `localize_edge` với IoU < 0.3, bù bằng vùng ngẫu nhiên). Cross-validation 5 fold (StratifiedKFold, shuffle, seed 42), trung bình ± độ lệch chuẩn giữa các fold:
+
+| accuracy | precision | recall | F1 |
+|---|---|---|---|
+| 0.966 ± 0.012 | 0.926 ± 0.030 | 0.939 ± 0.026 | 0.932 ± 0.024 |
+
+Lưu ý: CV chia theo patch, nên các mẫu từ cùng một ảnh có thể nằm ở cả train lẫn validation (rò rỉ nhẹ, số CV hơi lạc quan). Mẫu âm ngẫu nhiên khá dễ, nên CV cao hơn nhiều so với độ chính xác định vị thực tế bên dưới.
+
+Top-1 định vị (IoU ≥ 0.5, top-1 theo điểm; model train trên tune, **không chỉnh gì trên test**):
+
+| split | n | top-1 `localize_edge` | top-1 `localize_edge_svm` |
+|---|---|---|---|
+| tune | 198 | 0.646 (128) | 0.763 (151) |
+| test | 462 | 0.545 (252) | 0.658 (304) |
+
+Nhận xét: SVM chỉ xếp lại ≤ top_k = 5 ứng viên nên không cứu được ảnh `localize_edge` không sinh ứng viên đúng (tune: 182/198 ảnh có ≥ 1 ứng viên, test 425/462). Tăng +11 điểm trên test cho thấy cải thiện không chỉ do khớp tune. Số tune lạc quan vì đã train trên chính tập này. Chưa phân tích theo subset (việc của E3).
+
+Quyết định khi SPEC chưa nói rõ: `build_patch_dataset` raise `ValueError` nếu có record không phải tune; âm ngẫu nhiên có rộng 8-45% rộng ảnh, aspect 2-6, IoU < 0.3 với bbox thật; HOG dùng L2-Hys; `score_candidates` không lọc theo `score_threshold` (để tính Recall@k) và bỏ ứng viên có bbox rỗng; dict CV có khóa accuracy/precision/recall/f1 (+ `_std`, `folds`).
+
 ## Nắn
 
 2026-11-05. Đo trên tập tune, chỉ ảnh mà top-1 `localize_edge` có IoU ≥ 0.5 với GT (n=128), corner_error theo pixel ảnh gốc so với quad GT.
