@@ -135,6 +135,8 @@ Test (n=462), đo một lần, không chỉnh lại sau đó:
 
 Thời gian (một tiến trình, máy đang tải nên chỉ mang tính tương đối): tune 309 → 426 ms/ảnh, test 269 → 396 ms/ảnh (khoảng +40-50%, do thêm 2 lượt morph + contour + features). Số ứng viên TB mỗi ảnh gần như không đổi (2.0 → 2.05 trên tune).
 
+Trần recall do `area_ratio_range` cận dưới 0.008 (đã kiểm bằng script đếm trên GT bbox): tune 3/198 và test 16/462 bbox GT có area_ratio < 0.008 (test min 0.0032, tune min 0.0054), và 1 bbox GT test > 0.16 (max 0.182). Bộ lọc dùng diện tích minAreaRect của ứng viên (≤ diện tích bbox) nên mất mát thực có thể lớn hơn các con số này.
+
 Còn yếu: db (ngược sáng/chói) và challenge không cải thiện, n mỗi nhóm nhỏ (12 tune, 28 test) nên chênh lệch ±1-2 ảnh. Chưa thử bù nghiêng trước morph (xoay mặt nạ) cho tilt. Cải thiện top-1 chủ yếu nhờ cận dưới area; muốn nâng thêm cần xếp hạng tốt hơn (score hiện chỉ gồm density, fill, aspect).
 
 ## Nắn
