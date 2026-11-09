@@ -135,17 +135,19 @@ Test (n=462), đo một lần, không chỉnh lại sau đó:
 
 Thời gian (một tiến trình, máy đang tải nên chỉ mang tính tương đối): tune 309 → 426 ms/ảnh, test 269 → 396 ms/ảnh (khoảng +40-50%, do thêm 2 lượt morph + contour + features). Số ứng viên TB mỗi ảnh gần như không đổi (2.0 → 2.05 trên tune).
 
+Trần recall do `area_ratio_range` cận dưới 0.008 (đã kiểm bằng script đếm trên GT bbox): tune 3/198 và test 16/462 bbox GT có area_ratio < 0.008 (test min 0.0032, tune min 0.0054), và 1 bbox GT test > 0.16 (max 0.182). Bộ lọc dùng diện tích minAreaRect của ứng viên (≤ diện tích bbox) nên mất mát thực có thể lớn hơn các con số này.
+
 Còn yếu: db (ngược sáng/chói) và challenge không cải thiện, n mỗi nhóm nhỏ (12 tune, 28 test) nên chênh lệch ±1-2 ảnh. Chưa thử bù nghiêng trước morph (xoay mặt nạ) cho tilt. Cải thiện top-1 chủ yếu nhờ cận dưới area; muốn nâng thêm cần xếp hạng tốt hơn (score hiện chỉ gồm density, fill, aspect).
 
 ### hog_svm (#9)
 
-`localize/hog_svm.py` chấm lại ứng viên của `localize_edge` bằng HOG + LinearSVC (SPEC 8.7). Train/đo: `PYTHONPATH=src python experiments/train_hog_svm.py --eval-splits tune test` (lưu `models/svm.joblib`, gitignore). Cấu hình: patch 128×32, 9 hướng, cell 8×8, block 2×2 (D = 1620), C = 1.0, seed 42.
+`localize/hog_svm.py` chấm lại ứng viên của `localize_edge` bằng HOG + LinearSVC (SPEC 8.7). Train/đo: `PYTHONPATH=src python experiments/train_hog_svm.py --eval-splits tune test` (lưu `models/svm.joblib`, gitignore). Cấu hình HOG: patch 128×32, 9 hướng, cell 8×8, block 2×2 (D = 1620), C = 1.0, seed 42. Cấu hình `localize` là cấu hình của #22 (close [21,5] + extra [[13,3],[33,7]], area_ratio_range [0.008,0.16], aspect_range [1.5,7.0], top_k 5); số liệu dưới đây chạy lại sau khi merge #22.
 
-Dữ liệu: **chỉ split tune** (n=198 ảnh), 198 dương (crop bbox thật) + 594 âm (neg_per_pos = 3: ứng viên sai của `localize_edge` với IoU < 0.3, bù bằng vùng ngẫu nhiên). Cross-validation 5 fold (StratifiedKFold, shuffle, seed 42), trung bình ± độ lệch chuẩn giữa các fold:
+Dữ liệu: **chỉ split tune** (n=198 ảnh), 198 dương (crop bbox thật) + 594 âm (neg_per_pos = 3: ứng viên sai của `localize_edge` với IoU < 0.3, bù bằng vùng ngẫu nhiên, aspect lấy từ `localize.aspect_range`). Cross-validation 5 fold (StratifiedKFold, shuffle, seed 42), trung bình ± độ lệch chuẩn giữa các fold:
 
 | accuracy | precision | recall | F1 |
 |---|---|---|---|
-| 0.966 ± 0.012 | 0.926 ± 0.030 | 0.939 ± 0.026 | 0.932 ± 0.024 |
+| 0.960 ± 0.006 | 0.922 ± 0.035 | 0.919 ± 0.041 | 0.919 ± 0.013 |
 
 Lưu ý: CV chia theo patch, nên các mẫu từ cùng một ảnh có thể nằm ở cả train lẫn validation (rò rỉ nhẹ, số CV hơi lạc quan). Mẫu âm ngẫu nhiên khá dễ, nên CV cao hơn nhiều so với độ chính xác định vị thực tế bên dưới.
 
@@ -153,12 +155,12 @@ Top-1 định vị (IoU ≥ 0.5, top-1 theo điểm; model train trên tune, **k
 
 | split | n | top-1 `localize_edge` | top-1 `localize_edge_svm` |
 |---|---|---|---|
-| tune | 198 | 0.646 (128) | 0.763 (151) |
-| test | 462 | 0.545 (252) | 0.658 (304) |
+| tune | 198 | 0.747 (148) | 0.803 (159) |
+| test | 462 | 0.682 (315) | 0.751 (347) |
 
-Nhận xét: SVM chỉ xếp lại ≤ top_k = 5 ứng viên nên không cứu được ảnh `localize_edge` không sinh ứng viên đúng (tune: 182/198 ảnh có ≥ 1 ứng viên, test 425/462). Tăng +11 điểm trên test cho thấy cải thiện không chỉ do khớp tune. Số tune lạc quan vì đã train trên chính tập này. Chưa phân tích theo subset (việc của E3).
+Nhận xét: SVM chỉ xếp lại ≤ top_k = 5 ứng viên nên không cứu được ảnh `localize_edge` không sinh ứng viên đúng (trần xếp lại là `cand_recall`, tức ảnh có ứng viên đúng trong top_k, đo bằng `measure_localize_recall.py` với cấu hình #22: tune 0.828 (164/198), test 0.792 (366/462); top-1 SVM đạt 0.803/0.751, còn cách trần 2.5/4.1 điểm). Tăng +6.9 điểm trên test (+5.6 trên tune) cho thấy cải thiện không chỉ do khớp tune. Số tune lạc quan vì đã train trên chính tập này. Chưa phân tích theo subset (việc của E3).
 
-Quyết định khi SPEC chưa nói rõ: `build_patch_dataset` raise `ValueError` nếu có record không phải tune; âm ngẫu nhiên có rộng 8-45% rộng ảnh, aspect 2-6, IoU < 0.3 với bbox thật; HOG dùng L2-Hys; `score_candidates` không lọc theo `score_threshold` (để tính Recall@k) và bỏ ứng viên có bbox rỗng; dict CV có khóa accuracy/precision/recall/f1 (+ `_std`, `folds`).
+Quyết định khi SPEC chưa nói rõ: `build_patch_dataset` raise `ValueError` nếu có record không phải tune; âm ngẫu nhiên có rộng 8-45% rộng ảnh, aspect trong `localize.aspect_range`, IoU < 0.3 với bbox thật; HOG dùng L2-Hys; `score_candidates` không lọc theo `score_threshold` (để tính Recall@k) và bỏ ứng viên có bbox rỗng; dict CV có khóa accuracy/precision/recall/f1 (+ `_std`, `folds`).
 
 ## Nắn
 

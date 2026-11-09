@@ -113,7 +113,7 @@ def segmentation_rows(rec: PlateRecord, img: np.ndarray, top1: Candidate | None,
 def exp_predict(cfg: dict, args: argparse.Namespace) -> None:
     """E0: chạy pipeline trên split đã chọn, ghi results/predictions/localization.csv và segmentation.csv.
 
-    - localization: method edge × 4 denoise. edge_svm chưa có (hog_svm còn TODO) nên chưa ghi.
+    - localization: chỉ method edge × 4 denoise. edge_svm đã có (hog_svm, #21) và được E3 so sánh, nhưng E0 không xuất method edge_svm.
     - segmentation: crop_source gt/pred × crop_method bbox/quad × binarize × segmenter.
       Crop pred lấy top-1 của edge với denoise trong config (phương pháp tốt nhất hiện có, SPEC 9.5).
     """

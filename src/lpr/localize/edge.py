@@ -147,6 +147,7 @@ def localize_edge(img: np.ndarray, cfg: dict,
     """Chạy toàn bộ phương pháp A trên ảnh BGR gốc.
 
     Output: list Candidate với tọa độ theo ảnh gốc; nếu return_debug thì trả thêm DebugSteps.
+    Lưu ý: debug "morph"/"otsu" chỉ là mặt nạ của close_kernel chính; ứng viên có thể đến từ extra_close_kernels.
     """
     lc = cfg["localize"]
     gray, scale, steps = preprocess(img, cfg)
