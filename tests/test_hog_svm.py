@@ -150,3 +150,16 @@ def test_random_boxes_iou_below_threshold():
     for b in boxes:
         assert hog_svm.iou(b, BOX) < hog_svm.NEG_IOU_MAX
         assert 0 <= b[0] < b[2] <= 720 and 0 <= b[1] < b[3] <= 400
+
+
+def test_random_boxes_respects_aspect_and_is_deterministic():
+    lo, hi = 3.0, 4.0
+    boxes = hog_svm._random_boxes(BOX, (400, 720), 20, np.random.default_rng(7), aspect=(lo, hi))
+    assert boxes
+    for x1, y1, x2, y2 in boxes:
+        w, h = x2 - x1, y2 - y1
+        # bh = int(bw / ratio) cắt phần lẻ: w/h >= lo, và w/(h+1) < hi
+        assert w / h >= lo
+        assert w / (h + 1) < hi
+    again = hog_svm._random_boxes(BOX, (400, 720), 20, np.random.default_rng(7), aspect=(lo, hi))
+    assert boxes == again
