@@ -70,6 +70,9 @@ pytest -q
 python experiments/run_all.py --list
 python experiments/run_all.py --exp predict --split test --limit 20
 python experiments/run_all.py --exp all
+
+# huấn luyện SVM cho localize/hog_svm (chỉ tune) và đo top-1 edge vs edge_svm
+PYTHONPATH=src python experiments/train_hog_svm.py --eval-splits tune test
 ```
 
 Kết quả nằm trong `results/` (predictions, tables, figures, failures).
@@ -89,5 +92,6 @@ Kết quả nằm trong `results/` (predictions, tables, figures, failures).
 | `src/lpr/segment.py` | B |
 | `src/lpr/evaluate.py`, `tests/test_evaluate.py` | B |
 | `experiments/run_all.py`, `notebooks/01_color_spaces.ipynb` | B |
+| `experiments/train_hog_svm.py`, `tests/test_hog_svm.py` | A |
 
 Chỉ sửa file mình sở hữu. Muốn đổi file SHARED hoặc chữ ký hàm thì sửa SPEC trước và báo người kia. Tham số đã thử ghi vào [notes.md](notes.md).
