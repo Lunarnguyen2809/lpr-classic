@@ -132,19 +132,38 @@ def filter_candidates(rects: list[tuple], img_shape: tuple[int, int], edge: np.n
     return out[: lc["top_k"]]
 
 
+def _nms(cands: list[Candidate], thr: float) -> list[Candidate]:
+    """Gộp ứng viên trùng nhau (IoU bbox > thr) giữa các kernel close, giữ điểm cao hơn."""
+    from lpr.evaluate import iou
+    kept: list[Candidate] = []
+    for c in sorted(cands, key=lambda c: -c.score):
+        if all(iou(c.bbox, k.bbox) <= thr for k in kept):
+            kept.append(c)
+    return kept
+
+
 def localize_edge(img: np.ndarray, cfg: dict,
                   return_debug: bool = False) -> list[Candidate] | tuple[list[Candidate], DebugSteps]:
     """Chạy toàn bộ phương pháp A trên ảnh BGR gốc.
 
     Output: list Candidate với tọa độ theo ảnh gốc; nếu return_debug thì trả thêm DebugSteps.
+    Lưu ý: debug "morph"/"otsu" chỉ là mặt nạ của close_kernel chính; ứng viên có thể đến từ extra_close_kernels.
     """
     lc = cfg["localize"]
     gray, scale, steps = preprocess(img, cfg)
     edge = sobel_x_map(gray, lc["sobel_ksize"])
     binary = binarize_edges(edge)
     mask = morph_plate_regions(binary, tuple(lc["close_kernel"]), tuple(lc["open_kernel"]))
-    rects = extract_regions(mask)
-    cands = filter_candidates(rects, gray.shape[:2], binary, mask, cfg)
+    cands = filter_candidates(extract_regions(mask), gray.shape[:2], binary, mask, cfg)
+    extra = lc.get("extra_close_kernels") or []
+    if extra:
+        # đa tỉ lệ: mỗi kernel close thêm sinh ứng viên riêng, gộp rồi NMS (biển vỡ mảnh ở kernel nhỏ
+        # có thể liền ở kernel lớn và ngược lại)
+        pool = list(cands)
+        for k in extra:
+            m = morph_plate_regions(binary, tuple(k), tuple(lc["open_kernel"]))
+            pool += filter_candidates(extract_regions(m), gray.shape[:2], binary, m, cfg)
+        cands = _nms(pool, lc.get("nms_iou", 0.5))[: lc["top_k"]]
     ih, iw = img.shape[:2]
     for c in cands:
         # quay về tọa độ ảnh gốc: chia scale, bbox cắt trong biên ảnh

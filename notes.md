@@ -78,6 +78,67 @@ Kết quả chốt theo nhóm (tune):
 
 Nhận xét: nới ngưỡng fill/density là bước tăng lớn nhất (mặt nạ biển thật chỉ lấp ~0.5, density ~0.2). Close ngang 21-29 rộng tốt hơn 17. Nhóm tilt và db yếu: tilt do mask nghiêng làm minAreaRect rộng ra, db do ngược sáng/chói. Chưa tune trên test.
 
+### Issue #10: recall ứng viên của `localize_edge`, 2026-11-09
+
+Mục tiêu: biển thật bị bỏ sót vì vùng biển vỡ mảnh sau morph hoặc bị ứng viên nhỏ (logo, chữ) xếp trên. Đo bằng `PYTHONPATH=src python experiments/measure_localize_recall.py [--split test] [--set key=json ...]`. `cand_recall` = có ít nhất một ứng viên (trong top_k) IoU ≥ 0.5 với GT; `top1` = Recall SPEC 9.1; P = TP/(TP+FP) với top-1. Chọn tham số CHỈ trên tune (n=198); test (n=462) đo đúng một lần cho cấu hình chốt.
+
+Quan sát: bộ lọc mới là nút thắt (tăng `top_k` 5 → 10 không đổi recall). Vùng top-1 sai thường là blob rất nhỏ (area_ratio 0.002-0.003) trong khi biển thật 0.015-0.05. Diện tích bbox GT trên tune: min 0.0054, p5 0.0116, p50 0.027, p98 0.092, max 0.153; aspect bbox GT p5 1.43, p95 3.68 (biển nghiêng).
+
+Quét trên tune (ALL, đổi một thứ so với cấu hình cũ trừ khi ghi khác; ms/ảnh dao động do máy tải, không so giữa các dòng):
+
+| cấu hình | cand_recall | top1 | P |
+|---|---|---|---|
+| cũ (close [21,5], aspect [2,6], area [0.002,0.10]) | 0.768 | 0.646 | 0.703 |
+| top_k 10 | 0.768 | 0.646 | 0.703 |
+| close thêm [33,7] | 0.768 | 0.646 | 0.688 |
+| close thêm [13,3] + [33,7] | 0.828 | 0.652 | 0.665 |
+| close thêm [13,3] + [33,7] + [45,9] | 0.823 | 0.636 | 0.649 |
+| fill 0.3, density 0.08 | 0.783 | 0.636 | 0.653 |
+| aspect [1.5,7.0] | 0.783 | 0.652 | 0.690 |
+| area [0.001,0.2] | 0.768 | 0.540 | 0.557 |
+| max_angle 45 | 0.768 | 0.621 | 0.668 |
+| close [21,9] | 0.697 | 0.616 | 0.705 |
+| area [0.005,0.16] | 0.758 | 0.697 | 0.793 |
+| area [0.008,0.16] | 0.753 | 0.712 | 0.829 |
+| area [0.01,0.16] | 0.722 | 0.687 | 0.834 |
+| area [0.008,0.16] + 2 kernel thêm | 0.818 | 0.747 | 0.787 |
+| **area [0.008,0.16] + 2 kernel thêm + aspect [1.5,7.0] (CHỐT)** | **0.828** | **0.747** | **0.775** |
+| chốt + fill 0.3, density 0.08 (không chọn) | 0.843 | 0.758 | 0.761 |
+
+Thay đổi (config + code, đều có ghi trong SPEC 7 và 8.6):
+- `localize.extra_close_kernels: [[13,3],[33,7]]`: đa tỉ lệ. Chạy thêm morph với mỗi kernel, gộp ứng viên, NMS bbox (`nms_iou` 0.5), giữ top_k. Biển vỡ ở kernel này có thể liền ở kernel khác. Kernel đã tính theo ảnh resize 800 px nên không phụ thuộc kích thước ảnh gốc. `[]` tắt (hành vi cũ). `close_kernel` [21,5] vẫn là kernel chính (và là mặt nạ ghi vào debug "morph").
+- `area_ratio_range` [0.002,0.10] → [0.008,0.16]: cận dưới theo phân bố GT (loại logo/chữ nhỏ), cận trên theo max GT.
+- `aspect_range` [2,6] → [1.5,7]: minAreaRect của vùng cạnh nghiêng hoặc dính viền dài/ngắn hơn biển thật.
+- Không đổi fill/density: nới tiếp chỉ được +1.5 pt recall nhưng P giảm (0.775 → 0.761), trong nhiễu của subset 12 ảnh, nên giữ ngưỡng.
+
+Trước → sau, tune (n=198), cấu hình cũ → chốt:
+
+| subset | n | cand_recall | top1 (Recall@1) | P |
+|---|---|---|---|---|
+| base | 150 | 0.847 → 0.907 | 0.733 → 0.820 | 0.769 → 0.826 |
+| blur | 12 | 0.583 → 0.583 | 0.333 → 0.417 | 0.400 → 0.455 |
+| challenge | 12 | 0.750 → 0.750 | 0.583 → 0.750 | 0.636 → 0.818 |
+| db | 12 | 0.417 → 0.500 | 0.417 → 0.417 | 0.455 → 0.500 |
+| tilt | 12 | 0.333 → 0.500 | 0.167 → 0.500 | 0.286 → 0.600 |
+| ALL | 198 | 0.768 → 0.828 | 0.646 → 0.747 | 0.703 → 0.775 |
+
+Test (n=462), đo một lần, không chỉnh lại sau đó:
+
+| subset | n | cand_recall | top1 (Recall@1) | P |
+|---|---|---|---|---|
+| base | 350 | 0.729 → 0.874 | 0.609 → 0.751 | 0.644 → 0.771 |
+| blur | 28 | 0.500 → 0.643 | 0.357 → 0.643 | 0.400 → 0.750 |
+| challenge | 28 | 0.571 → 0.500 | 0.429 → 0.464 | 0.500 → 0.619 |
+| db | 28 | 0.464 → 0.429 | 0.321 → 0.321 | 0.409 → 0.409 |
+| tilt | 28 | 0.357 → 0.571 | 0.286 → 0.429 | 0.348 → 0.500 |
+| ALL | 462 | 0.667 → 0.792 | 0.545 → 0.682 | 0.593 → 0.729 |
+
+Thời gian (một tiến trình, máy đang tải nên chỉ mang tính tương đối): tune 309 → 426 ms/ảnh, test 269 → 396 ms/ảnh (khoảng +40-50%, do thêm 2 lượt morph + contour + features). Số ứng viên TB mỗi ảnh gần như không đổi (2.0 → 2.05 trên tune).
+
+Trần recall do `area_ratio_range` cận dưới 0.008 (đã kiểm bằng script đếm trên GT bbox): tune 3/198 và test 16/462 bbox GT có area_ratio < 0.008 (test min 0.0032, tune min 0.0054), và 1 bbox GT test > 0.16 (max 0.182). Bộ lọc dùng diện tích minAreaRect của ứng viên (≤ diện tích bbox) nên mất mát thực có thể lớn hơn các con số này.
+
+Còn yếu: db (ngược sáng/chói) và challenge không cải thiện, n mỗi nhóm nhỏ (12 tune, 28 test) nên chênh lệch ±1-2 ảnh. Chưa thử bù nghiêng trước morph (xoay mặt nạ) cho tilt. Cải thiện top-1 chủ yếu nhờ cận dưới area; muốn nâng thêm cần xếp hạng tốt hơn (score hiện chỉ gồm density, fill, aspect).
+
 ## Nắn
 
 2026-11-05. Đo trên tập tune, chỉ ảnh mà top-1 `localize_edge` có IoU ≥ 0.5 với GT (n=128), corner_error theo pixel ảnh gốc so với quad GT.
