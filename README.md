@@ -73,6 +73,13 @@ python experiments/run_all.py --exp all
 
 # huấn luyện SVM cho localize/hog_svm (chỉ tune) và đo top-1 edge vs edge_svm
 PYTHONPATH=src python experiments/train_hog_svm.py --eval-splits tune test
+
+# E2, E3, E4, E7 (E3, E4, E7 cần models/svm.joblib ở trên; E3 đọc denoise đã chọn từ e2_filters.csv,
+# E4 đọc method đã chọn từ e3_localization.csv, thiếu thì tự chạy E2/E3 trước)
+PYTHONPATH=src python experiments/run_all.py --exp filters
+PYTHONPATH=src python experiments/run_all.py --exp localization
+PYTHONPATH=src python experiments/run_all.py --exp rectify
+PYTHONPATH=src python experiments/run_all.py --exp runtime
 ```
 
 Đo recall ứng viên của `localize_edge` theo subset (issue #10, mặc định tune; `--split test` chỉ dùng một lần cho cấu hình đã chốt):

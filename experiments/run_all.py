@@ -22,8 +22,9 @@ from lpr.data.dataset import load_char_labels, load_records
 from lpr.evaluate import count_match, iou, match_detections, position_hits, prf
 from lpr.io_utils import read_image, timer, write_csv
 from lpr.localize.edge import localize_edge
-from lpr.preprocess import to_gray
-from lpr.rectify import quad_from_candidate, rectify
+from lpr.localize.hog_svm import load_model, score_candidates
+from lpr.preprocess import preprocess, to_gray
+from lpr.rectify import corner_error, quad_from_candidate, rectify
 from lpr.segment import segment
 from lpr.types import Candidate, PlateRecord
 
@@ -38,6 +39,7 @@ SEG_COLS = ["image_id", "subset", "crop_source", "crop_method", "binarize", "seg
             "n_boxes", "n_expected", "count_match", "pos0_hit", "pos1_6_hits", "all_correct", "ms"]
 
 DENOISES = ["none", "gaussian", "median", "bilateral"]
+LOC_METHODS = ["edge", "edge_svm"]   # thứ tự cố định cho E3 (hòa F1 thì chọn method đứng trước)
 CROP_METHODS = ["bbox", "quad"]
 BINARIZE_METHODS = ["otsu", "adaptive"]
 SEGMENTERS = ["cca", "projection"]
@@ -112,9 +114,10 @@ def segmentation_rows(rec: PlateRecord, img: np.ndarray, top1: Candidate | None,
 def exp_predict(cfg: dict, args: argparse.Namespace) -> None:
     """E0: chạy pipeline trên split đã chọn, ghi results/predictions/localization.csv và segmentation.csv.
 
-    - localization: method edge × 4 denoise. edge_svm chưa có (hog_svm còn TODO) nên chưa ghi.
+    - localization: chỉ method edge × 4 denoise. edge_svm đã có (hog_svm, #21) và được E3 so sánh, nhưng E0 không xuất method edge_svm.
     - segmentation: crop_source gt/pred × crop_method bbox/quad × binarize × segmenter.
-      Crop pred lấy top-1 của edge với denoise trong config (phương pháp tốt nhất hiện có, SPEC 9.5).
+      Crop pred lấy top-1 của edge (không SVM) với denoise trong config. Đây KHÔNG còn là phương pháp tốt nhất:
+      E3 chọn edge_svm trên tune. TODO(follow-up, code của Bích): E0 nên dùng method/denoise mà E3/E2 chọn (SPEC 9.5).
     """
     recs = load_records(cfg, split=args.split)[: args.limit]
     best_dn = cfg["preprocess"]["denoise"]
@@ -216,21 +219,6 @@ def exp_color(cfg: dict, args: argparse.Namespace) -> None:
     print(f"đã ghi {tpath} và {fpath}")
 
 
-def exp_filters(cfg: dict, args: argparse.Namespace) -> None:
-    """E2: so sánh bộ lọc khử nhiễu với localize_edge (P/R/F1, ms/ảnh), ghi tables/e2_filters.csv."""
-    raise NotImplementedError("TODO(B): exp_filters")
-
-
-def exp_localization(cfg: dict, args: argparse.Namespace) -> None:
-    """E3: edge vs edge_svm (P/R/F1, Recall@k theo subset), ghi tables/e3_localization.csv."""
-    raise NotImplementedError("TODO(B): exp_localization")
-
-
-def exp_rectify(cfg: dict, args: argparse.Namespace) -> None:
-    """E4: crop bbox vs warp quad (corner_error, count_match, pos acc), ghi tables/e4_rectify.csv."""
-    raise NotImplementedError("TODO(B): exp_rectify")
-
-
 SUBSET_ORDER = ["base", "blur", "challenge", "db", "tilt", "ALL"]
 E5_CROP = "quad"   # SPEC 10: E5 cố định crop gt; dùng quad vì E4 / tune cho thấy quad hơn bbox rõ
 
@@ -279,6 +267,270 @@ def _print_table(rows: list[dict], cols: list[str]) -> None:
     print("  ".join(f"{c:>12}" for c in cols))
     for r in rows:
         print("  ".join(f"{r[c]:>12.3f}" if isinstance(r[c], float) else f"{str(r[c]):>12}" for c in cols))
+
+
+LOC_KS = (1, 3, 5)   # Recall@k báo trong E2/E3 (top_k trong config = 5)
+
+
+def summarize_localization(df: pd.DataFrame, by: list[str]) -> list[dict]:
+    """Gom metric SPEC 9.1 theo `by` × subset (+ ALL). Input: dòng kiểu `localization_rows`.
+
+    Mỗi ảnh = 1 mẫu: top-1 là dòng rank 1 (rank 0 = không có ứng viên). TP nếu top-1 đúng, FP nếu có
+    top-1 mà sai, FN nếu không có TP (kể cả không có ứng viên) nên TP + FN = n. Recall@k = có ít nhất
+    một dòng rank 1..k đúng. ms = thời gian cả ảnh (lặp ở mọi rank nên lấy dòng đầu của ảnh).
+    Output: list dict cột by..., subset, n, tp, fp, fn, precision, recall, f1, recall_at_1/3/5, ms_mean.
+    """
+    img_rows = []
+    for key, g in df.groupby(by + ["image_id"], sort=True):
+        hit = g[g["rank"] >= 1]
+        tp_ranks = hit.loc[hit["is_tp"].astype(bool), "rank"]
+        first_tp = int(tp_ranks.min()) if len(tp_ranks) else 0
+        img_rows.append({**dict(zip(by, key[:-1])), "subset": g["subset"].iloc[0],
+                         "has_top1": bool((g["rank"] == 1).any()), "top1_ok": first_tp == 1,
+                         "first_tp": first_tp, "ms": float(g["ms"].iloc[0])})
+    per = pd.DataFrame(img_rows)
+    rows = []
+    for key, g in per.groupby(by, sort=True):
+        key = key if isinstance(key, tuple) else (key,)
+        parts = [(s, g[g["subset"] == s]) for s in SUBSET_ORDER[:-1]] + [("ALL", g)]
+        for sub, gs in parts:
+            if gs.empty:
+                continue
+            tp = int(gs["top1_ok"].sum())
+            fp = int((gs["has_top1"] & ~gs["top1_ok"]).sum())
+            m = prf(tp, fp, len(gs) - tp)
+            row = {**dict(zip(by, key)), "subset": sub, "n": len(gs), "tp": tp, "fp": fp,
+                   "fn": len(gs) - tp, "precision": round(m["precision"], 4),
+                   "recall": round(m["recall"], 4), "f1": round(m["f1"], 4)}
+            for k in LOC_KS:
+                row[f"recall_at_{k}"] = round(float(((gs["first_tp"] >= 1) & (gs["first_tp"] <= k)).mean()), 4)
+            row["ms_mean"] = round(gs["ms"].mean(), 2)
+            rows.append(row)
+    return rows
+
+
+def pick_best(rows: list[dict], col: str, split: str = "tune", order: list[str] | None = None) -> str:
+    """Giá trị `col` có F1 cao nhất ở dòng subset = ALL của `split`.
+
+    Hòa F1 thì chọn giá trị đứng trước trong `order` (thứ tự cố định theo config/danh sách phương pháp,
+    mặc định thứ tự xuất hiện trong `rows`), không phụ thuộc tốc độ nên kết quả không đổi giữa các lần chạy.
+    Chọn tham số CHỈ trên tune (SPEC 10: không chọn trên test).
+    """
+    cand = [r for r in rows if r["subset"] == "ALL" and r["split"] == split]
+    if not cand:
+        raise ValueError(f"không có dòng ALL của split {split} để chọn {col}")
+    seq = list(order) if order is not None else list(dict.fromkeys(r[col] for r in rows))
+    return min(cand, key=lambda r: (-r["f1"], seq.index(r[col]) if r[col] in seq else len(seq)))[col]
+
+
+def _splits(args: argparse.Namespace) -> list[str]:
+    """Tune (để chọn) rồi tới split báo cáo; trùng thì chỉ một."""
+    return ["tune"] if args.split == "tune" else ["tune", args.split]
+
+
+def _records(cfg: dict, split: str, limit: int | None, exp: str) -> list[PlateRecord]:
+    """Record của split sau --limit; từ chối split qual (không có gt) và danh sách rỗng bằng thông báo rõ."""
+    if split == "qual":
+        raise SystemExit(f"{exp} cần nhãn bbox/quad nên không chạy được với --split qual (ảnh VN không có gt); "
+                         "dùng --split test hoặc tune")
+    recs = load_records(cfg, split=split)[:limit]
+    if not recs:
+        raise SystemExit(f"{exp}: split={split} không có record nào (limit={limit}), kiểm tra data/splits.csv")
+    return recs
+
+
+def choose_from_table(df: pd.DataFrame, col: str, n_tune: int) -> tuple[str, int] | None:
+    """Giá trị `col` ở dòng `chosen` của bảng E2/E3, nếu bảng khớp lần chạy hiện tại; không khớp thì None.
+
+    Khớp = có cột split và chosen, có dòng ALL của tune, và mọi dòng ALL của tune đều có n = n_tune (số
+    record tune hiện tại sau --limit). Trả (giá trị, n) để người gọi in nguồn của lựa chọn.
+    """
+    if "split" not in df.columns or "chosen" not in df.columns:
+        return None
+    tune = df[(df["split"] == "tune") & (df["subset"] == "ALL")]
+    if tune.empty or not (tune["n"] == n_tune).all():
+        return None
+    hit = df[df["chosen"].astype(bool)]
+    if hit.empty:
+        return None
+    return str(hit[col].iloc[0]), int(tune["n"].iloc[0])
+
+
+def _chosen(cfg: dict, name: str, col: str, runner, args: argparse.Namespace) -> str:
+    """Đọc giá trị đã chọn (cột `chosen` = True) từ bảng E2/E3.
+
+    Dùng lại file có sẵn chỉ khi n của dòng ALL tune bằng số record tune hiện tại (choose_from_table);
+    thiếu file hoặc không khớp thì chạy lại `runner` (thí nghiệm tiền nhiệm). Luôn in file và n nguồn.
+    """
+    path = os.path.join(cfg["paths"]["results"], "tables", name)
+    n_tune = len(_records(cfg, "tune", args.limit, name))
+    exists = os.path.isfile(path)
+    got = choose_from_table(pd.read_csv(path), col, n_tune) if exists else None
+    if got is None:
+        why = f"không khớp lần chạy này (n tune hiện tại = {n_tune})" if exists else "chưa có"
+        print(f"{path} {why}, chạy lại thí nghiệm tiền nhiệm")
+        runner(cfg, args)
+        got = choose_from_table(pd.read_csv(path), col, n_tune)
+        if got is None:
+            raise RuntimeError(f"{path} vẫn không khớp sau khi chạy lại")
+    print(f"chọn {col} = {got[0]} từ {path} (tune n={got[1]})")
+    return got[0]
+
+
+def _load_svm(cfg: dict):
+    path = os.path.join(cfg["paths"]["models"], "svm.joblib")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"thiếu {path}; chạy: PYTHONPATH=src python experiments/train_hog_svm.py")
+    return load_model(path)
+
+
+def exp_filters(cfg: dict, args: argparse.Namespace) -> None:
+    """E2: so sánh bộ lọc khử nhiễu với localize_edge (P/R/F1, ms/ảnh), ghi tables/e2_filters.csv.
+
+    Chạy trên tune (để chọn) và split báo cáo (cột `split`). Cột `chosen` = True ở denoise có F1 ALL
+    cao nhất trên tune; E3 dùng giá trị này.
+    """
+    dcfgs = {dn: load_config(args.config, {"preprocess": {"denoise": dn}}) for dn in DENOISES}
+    table: list[dict] = []
+    for split in _splits(args):
+        recs = _records(cfg, split, args.limit, "E2")
+        print(f"E2 split={split} n={len(recs)} denoise={DENOISES}")
+        rows: list[dict] = []
+        for i, r in enumerate(recs, 1):
+            img = read_image(r.path)
+            for dn, dcfg in dcfgs.items():
+                with timer() as t:
+                    cands = localize_edge(img, dcfg)
+                rows += localization_rows(r, cands, t.ms, "edge", dn, cfg)
+            if i % 50 == 0 or i == len(recs):
+                print(f"  {i}/{len(recs)}")
+        table += [{"split": split, **x} for x in summarize_localization(pd.DataFrame(rows), ["method", "denoise"])]
+    best = pick_best(table, "denoise", order=DENOISES)
+    for x in table:
+        x["chosen"] = x["denoise"] == best
+    path = os.path.join(cfg["paths"]["results"], "tables", "e2_filters.csv")
+    write_csv(table, path)
+    print(f"E2 chọn denoise = {best} (F1 cao nhất trên tune)")
+    cols = ["split", "denoise", "n", "precision", "recall", "f1", "recall_at_5", "ms_mean"]
+    _print_table([x for x in table if x["subset"] == "ALL"], cols)
+    print(f"đã ghi {path}")
+
+
+def exp_localization(cfg: dict, args: argparse.Namespace) -> None:
+    """E3: edge vs edge_svm (P/R/F1, Recall@k theo subset), ghi tables/e3_localization.csv.
+
+    Denoise = giá trị E2 chọn trên tune. SVM chấm lại đúng danh sách ứng viên của edge, top-1 không lọc
+    theo score_threshold (giữ Recall@k). ms edge_svm = localize_edge + chấm SVM. Chạy trên tune và split
+    báo cáo; cột `chosen` = True ở method có F1 ALL cao nhất trên tune (E4 dùng).
+    """
+    _records(cfg, args.split, args.limit, "E3")   # từ chối split qual / rỗng trước khi chạy E2
+    dn = _chosen(cfg, "e2_filters.csv", "denoise", exp_filters, args)
+    dcfg = load_config(args.config, {"preprocess": {"denoise": dn}})
+    model = _load_svm(dcfg)
+    table: list[dict] = []
+    for split in _splits(args):
+        recs = _records(cfg, split, args.limit, "E3")
+        print(f"E3 split={split} n={len(recs)} denoise={dn}")
+        rows: list[dict] = []
+        for i, r in enumerate(recs, 1):
+            img = read_image(r.path)
+            with timer() as t_edge:
+                cands = localize_edge(img, dcfg)
+            with timer() as t_svm:
+                svm = score_candidates(img, cands, model, dcfg)
+            rows += localization_rows(r, cands, t_edge.ms, "edge", dn, cfg)
+            rows += localization_rows(r, svm, t_edge.ms + t_svm.ms, "edge_svm", dn, cfg)
+            if i % 50 == 0 or i == len(recs):
+                print(f"  {i}/{len(recs)}")
+        table += [{"split": split, **x} for x in summarize_localization(pd.DataFrame(rows), ["method"])]
+    best = pick_best(table, "method", order=LOC_METHODS)
+    for x in table:
+        x["denoise"] = dn
+        x["chosen"] = x["method"] == best
+    path = os.path.join(cfg["paths"]["results"], "tables", "e3_localization.csv")
+    write_csv(table, path)
+    print(f"E3 chọn method = {best} (F1 cao nhất trên tune)")
+    cols = ["split", "method", "subset", "n", "precision", "recall", "f1", "recall_at_1", "recall_at_3",
+            "recall_at_5", "ms_mean"]
+    _print_table(table, cols)
+    print(f"đã ghi {path}")
+
+
+def rectify_image_rows(seg_rows: list[dict], corner: dict[str, float | None], loc_ok: bool) -> list[dict]:
+    """Dòng E4 của một ảnh từ `segmentation_rows`: giữ binarize = otsu, segmenter = cca (SPEC 10 cố định).
+
+    corner = {crop_method: corner_error hoặc None}, chỉ gắn cho crop_source = pred (crop gt dùng quad
+    thật nên không có sai số góc). loc_ok = top-1 định vị đúng (IoU ≥ ngưỡng): khi True, mỗi dòng pred
+    được nhân thêm một dòng crop_source = pred_tp, để so bbox/quad trên đúng các ảnh đã định vị được.
+    """
+    out = []
+    for r in seg_rows:
+        if r["binarize"] != "otsu" or r["segmenter"] != "cca":
+            continue
+        row = {k: r[k] for k in ("image_id", "subset", "crop_source", "crop_method", "n_boxes",
+                                 "count_match", "pos0_hit", "pos1_6_hits", "all_correct", "ms")}
+        row["corner_error"] = corner.get(r["crop_method"]) if r["crop_source"] == "pred" else None
+        out.append(row)
+        if r["crop_source"] == "pred" and loc_ok:
+            out.append({**row, "crop_source": "pred_tp"})
+    return out
+
+
+def rectify_table(df: pd.DataFrame) -> list[dict]:
+    """Gom E4 theo crop_source × crop_method × subset (+ ALL): metric 9.3 + corner_error (9.2).
+
+    corner_n / corner_mean / corner_median tính trên các dòng có corner_error (ảnh định vị đúng, có quad).
+    """
+    rows = summarize_segmentation(df, ["crop_source", "crop_method"])
+    for r in rows:
+        g = df[(df["crop_source"] == r["crop_source"]) & (df["crop_method"] == r["crop_method"])]
+        if r["subset"] != "ALL":
+            g = g[g["subset"] == r["subset"]]
+        ce = g["corner_error"].dropna()
+        r["corner_n"] = len(ce)
+        r["corner_mean"] = round(float(ce.mean()), 2) if len(ce) else None
+        r["corner_median"] = round(float(ce.median()), 2) if len(ce) else None
+    return rows
+
+
+def exp_rectify(cfg: dict, args: argparse.Namespace) -> None:
+    """E4: crop bbox vs warp quad (corner_error, count_match, pos acc), ghi tables/e4_rectify.csv.
+
+    Binarize Otsu + CCA cố định. Ứng viên top-1 = method E3 chọn trên tune (denoise của E2). crop_source:
+    gt (crop từ bbox/quad thật), pred (top-1, mọi ảnh, định vị sai tính là hỏng), pred_tp (chỉ ảnh top-1
+    đúng IoU ≥ 0.5). corner_error (pixel ảnh gốc, SPEC 9.2): quad pred = quad_from_candidate; với crop
+    bbox, quad ngầm là 4 góc bbox pred. Chỉ tính trên ảnh định vị đúng.
+    """
+    _records(cfg, args.split, args.limit, "E4")   # từ chối split qual / rỗng trước khi chạy E2/E3
+    method = _chosen(cfg, "e3_localization.csv", "method", exp_localization, args)
+    dn = _chosen(cfg, "e2_filters.csv", "denoise", exp_filters, args)
+    dcfg = load_config(args.config, {"preprocess": {"denoise": dn}})
+    model = _load_svm(dcfg) if method == "edge_svm" else None
+    thr = get(cfg, "evaluate.iou_threshold", 0.5)
+    recs = _records(cfg, args.split, args.limit, "E4")
+    print(f"E4 split={args.split} n={len(recs)} localize={method} denoise={dn} binarize=otsu segment=cca")
+    rows: list[dict] = []
+    for i, r in enumerate(recs, 1):
+        img = read_image(r.path)
+        cands = localize_edge(img, dcfg)
+        if model is not None:
+            cands = score_candidates(img, cands, model, dcfg)
+        top1 = cands[0] if cands else None
+        loc_ok = top1 is not None and iou(top1.bbox, r.bbox) >= thr
+        corner: dict[str, float | None] = {}
+        if loc_ok:
+            x1, y1, x2, y2 = top1.bbox
+            corner["bbox"] = corner_error(np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], np.float32), r.quad)
+            corner["quad"] = corner_error(quad_from_candidate(img, top1, dcfg["rectify"]["quad_method"]), r.quad)
+        rows += rectify_image_rows(segmentation_rows(r, img, top1, dcfg), corner, loc_ok)
+        if i % 50 == 0 or i == len(recs):
+            print(f"  {i}/{len(recs)}")
+    table = rectify_table(pd.DataFrame(rows))
+    path = os.path.join(cfg["paths"]["results"], "tables", "e4_rectify.csv")
+    write_csv(table, path)
+    _print_table(table, ["crop_source", "crop_method", "subset", "n", "corner_n", "corner_mean",
+                         "corner_median", "count_match", "pos0_acc", "pos1_6_acc", "all_correct"])
+    print(f"đã ghi {path}")
 
 
 def char_box_rows(cfg: dict, args: argparse.Namespace, bin_m: str) -> dict[tuple[str, str], dict]:
@@ -358,9 +610,96 @@ def exp_segmentation(cfg: dict, args: argparse.Namespace) -> None:
     print(f"đã ghi {path}")
 
 
+RUNTIME_STEPS = ["preprocess", "localize_other", "hog_svm", "quad", "rectify", "binarize", "segment",
+                 "total_edge", "total"]
+
+
+def runtime_table(df: pd.DataFrame) -> list[dict]:
+    """Gom thời gian theo bước × subset (+ ALL). Input: cột image_id, subset, step, ms.
+
+    Output: step, subset, n (số ảnh có bước đó), ms_mean, ms_p95. Bước theo thứ tự RUNTIME_STEPS.
+    """
+    rows = []
+    for step in RUNTIME_STEPS:
+        d = df[df["step"] == step]
+        for sub in SUBSET_ORDER:
+            g = d if sub == "ALL" else d[d["subset"] == sub]
+            if g.empty:
+                continue
+            rows.append({"step": step, "subset": sub, "n": len(g), "ms_mean": round(float(g["ms"].mean()), 2),
+                         "ms_p95": round(float(np.percentile(g["ms"], 95)), 2)})
+    return rows
+
+
+def _runtime_one(img: np.ndarray, cfg: dict, model) -> dict[str, float]:
+    """Thời gian (ms) từng bước pipeline edge_svm trên một ảnh. Bước không chạy được thì vắng khỏi dict.
+
+    localize_other = t(localize_edge) - t(gọi preprocess riêng), chặn dưới 0. Chỉ là ước lượng: preprocess chạy
+    hai lần (một lần đo riêng, một lần nằm trong localize_edge) nên chênh lệch bị nhiễu thời gian và cache,
+    có thể lệch vài phần mười ms. Phần còn lại gồm Sobel, nhị phân cạnh, morph, lọc ứng viên, NMS.
+    Khởi động (nạp thư viện, cache) chỉ chạy một lượt trên ảnh đầu tiên của exp_runtime, không phải mỗi ảnh.
+    model = None (E3 chọn edge): bỏ bước hog_svm, total = total_edge.
+    total_edge = tổng không có hog_svm; total = tổng cả pipeline edge_svm.
+    """
+    ms: dict[str, float] = {}
+    with timer() as t:
+        preprocess(img, cfg)
+    ms["preprocess"] = t.ms
+    with timer() as t:
+        cands = localize_edge(img, cfg)
+    ms["localize_other"] = max(0.0, t.ms - ms["preprocess"])
+    if model is not None:
+        with timer() as t:
+            cands = score_candidates(img, cands, model, cfg)
+        ms["hog_svm"] = t.ms
+    if cands:
+        top1 = cands[0]
+        with timer() as t:
+            quad = quad_from_candidate(img, top1, cfg["rectify"]["quad_method"])
+        ms["quad"] = t.ms
+        with timer() as t:
+            gray = to_gray(rectify(img, top1.bbox, quad, "quad", cfg))
+        ms["rectify"] = t.ms
+        bm = cfg["binarize"]["method"]
+        with timer() as t:
+            b = clean_binary(ensure_text_white(binarize_plate(gray, bm, cfg["binarize"].get(bm, {}))))
+        ms["binarize"] = t.ms
+        with timer() as t:
+            segment(b, cfg["segment"]["method"], cfg)
+        ms["segment"] = t.ms
+    ms["total_edge"] = sum(v for k, v in ms.items() if k != "hog_svm")
+    ms["total"] = ms["total_edge"] + ms.get("hog_svm", 0.0)
+    return ms
+
+
 def exp_runtime(cfg: dict, args: argparse.Namespace) -> None:
-    """E7: thời gian từng bước (ms/ảnh trung bình, p95), ghi tables/e7_runtime.csv."""
-    raise NotImplementedError("TODO(B): exp_runtime")
+    """E7: thời gian từng bước (ms/ảnh trung bình, p95), ghi tables/e7_runtime.csv.
+
+    Pipeline theo lựa chọn của E2/E3 trên tune (đọc qua _chosen như E4): denoise = E2 chọn, method = E3 chọn
+    (edge_svm thì có bước hog_svm, edge thì không). binarize, segment lấy từ cfg (E5/E6 không chọn lại). Crop quad
+    từ top-1. Ảnh đầu chạy một lượt khởi động không tính. Chạy tuần tự một tiến trình; số tuyệt đối phụ thuộc máy.
+    Bước localize_other là ước lượng, xem _runtime_one.
+    """
+    recs = _records(cfg, args.split, args.limit, "E7")
+    method = _chosen(cfg, "e3_localization.csv", "method", exp_localization, args)
+    dn = _chosen(cfg, "e2_filters.csv", "denoise", exp_filters, args)
+    dcfg = load_config(args.config, {"preprocess": {"denoise": dn}})
+    model = _load_svm(dcfg) if method == "edge_svm" else None
+    print(f"E7 split={args.split} n={len(recs)} localize={method} denoise={dn}")
+    rows: list[dict] = []
+    for i, r in enumerate(recs, 1):
+        img = read_image(r.path)
+        if i == 1:
+            _runtime_one(img, dcfg, model)   # khởi động (nạp thư viện, cache), bỏ
+        for step, v in _runtime_one(img, dcfg, model).items():
+            rows.append({"image_id": r.image_id, "subset": r.subset, "step": step, "ms": v})
+        if i % 100 == 0 or i == len(recs):
+            print(f"  {i}/{len(recs)}")
+    table = runtime_table(pd.DataFrame(rows))
+    path = os.path.join(cfg["paths"]["results"], "tables", "e7_runtime.csv")
+    write_csv(table, path)
+    _print_table([t for t in table if t["subset"] == "ALL"], ["step", "n", "ms_mean", "ms_p95"])
+    print(f"đã ghi {path}")
 
 
 def exp_vn_qualitative(cfg: dict, args: argparse.Namespace) -> None:
