@@ -314,3 +314,35 @@ def test_runtime_table_mean_p95_and_subset():
     assert tot["ALL"]["n"] == 4 and tot["ALL"]["ms_mean"] == 25.0
     assert tot["ALL"]["ms_p95"] == pytest.approx(38.5)
     assert tot["base"]["n"] == 2 and tot["db"]["ms_mean"] == 35.0
+
+
+# ---------- E0 dùng phương pháp tốt nhất (E2 / E3 chọn) ----------
+
+WRONG = (0, 0, 60, 20)   # ứng viên sai: góc trái trên, không chồng biển
+
+
+@pytest.mark.parametrize("best_method, pred_ok", [("edge_svm", True), ("edge", False)])
+def test_exp_predict_uses_chosen_method(cfg, tmp_path, monkeypatch, best_method, pred_ok):
+    """edge xếp ứng viên sai lên đầu, SVM đảo lại. Crop pred phải lấy top-1 của method E3 chọn,
+    và localization.csv có đủ cả hai method × 4 denoise."""
+    rec, img = _record(), _image(cfg)
+    chosen = {"method": best_method, "denoise": "bilateral"}
+    monkeypatch.setattr(run_all, "_chosen", lambda c, name, col, runner, a: chosen[col])
+    monkeypatch.setattr(run_all, "_load_svm", lambda c: object())
+    monkeypatch.setattr(run_all, "load_records", lambda c, split=None: [rec])
+    monkeypatch.setattr(run_all, "read_image", lambda p: img)
+    monkeypatch.setattr(run_all, "localize_edge", lambda im, c: [_cand(WRONG, 0.9), _cand(BOX, 0.5)])
+    monkeypatch.setattr(run_all, "score_candidates", lambda im, cands, m, c: list(reversed(cands)))
+    tcfg = {**cfg, "paths": {**cfg["paths"], "results": str(tmp_path)}}
+    run_all.exp_predict(tcfg, argparse.Namespace(split="test", limit=None, config="config/default.yaml"))
+
+    loc = pd.read_csv(tmp_path / "predictions" / "localization.csv")
+    assert list(loc.columns) == run_all.LOC_COLS
+    assert set(zip(loc.method, loc.denoise)) == {(m, d) for m in run_all.LOC_METHODS for d in run_all.DENOISES}
+    top = loc[loc["rank"] == 1]
+    assert not top[top.method == "edge"].is_tp.any() and top[top.method == "edge_svm"].is_tp.all()
+
+    seg = pd.read_csv(tmp_path / "predictions" / "segmentation.csv")
+    pred_quad = seg[(seg.crop_source == "pred") & (seg.crop_method == "quad")]
+    assert len(seg) == 16
+    assert pred_quad.n_boxes.gt(0).all() == pred_ok   # crop sai (góc ảnh nền xám) không ra ký tự nào

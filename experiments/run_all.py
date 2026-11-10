@@ -114,27 +114,35 @@ def segmentation_rows(rec: PlateRecord, img: np.ndarray, top1: Candidate | None,
 def exp_predict(cfg: dict, args: argparse.Namespace) -> None:
     """E0: chạy pipeline trên split đã chọn, ghi results/predictions/localization.csv và segmentation.csv.
 
-    - localization: chỉ method edge × 4 denoise. edge_svm đã có (hog_svm, #21) và được E3 so sánh, nhưng E0 không xuất method edge_svm.
+    - localization: method {edge, edge_svm} × 4 denoise. edge_svm = SVM chấm lại đúng danh sách ứng viên
+      của edge (giống E3), ms = localize_edge + chấm SVM.
     - segmentation: crop_source gt/pred × crop_method bbox/quad × binarize × segmenter.
-      Crop pred lấy top-1 của edge (không SVM) với denoise trong config. Đây KHÔNG còn là phương pháp tốt nhất:
-      E3 chọn edge_svm trên tune. TODO(follow-up, code của Bích): E0 nên dùng method/denoise mà E3/E2 chọn (SPEC 9.5).
+      Crop pred = top-1 của phương pháp tốt nhất (SPEC 9.5): method E3 chọn, denoise E2 chọn, cả hai chọn
+      trên tune và đọc từ bảng e3 / e2 (thiếu hoặc không khớp lần chạy thì tự chạy E2 / E3 trước).
     """
     recs = load_records(cfg, split=args.split)[: args.limit]
-    best_dn = cfg["preprocess"]["denoise"]
+    best_method = _chosen(cfg, "e3_localization.csv", "method", exp_localization, args)
+    best_dn = _chosen(cfg, "e2_filters.csv", "denoise", exp_filters, args)
     out_dir = os.path.join(cfg["paths"]["results"], "predictions")
     loc_rows: list[dict] = []
     seg_rows: list[dict] = []
     dcfgs = {dn: load_config(args.config, {"preprocess": {"denoise": dn}}) for dn in DENOISES}
-    print(f"split={args.split} n={len(recs)} denoise={DENOISES} crop pred = edge + {best_dn}")
+    model = _load_svm(cfg)
+    print(f"split={args.split} n={len(recs)} method={LOC_METHODS} denoise={DENOISES} "
+          f"crop pred = {best_method} + {best_dn}")
     for i, r in enumerate(recs, 1):
         img = read_image(r.path)
         top1 = None
         for dn, dcfg in dcfgs.items():
-            with timer() as t:
+            with timer() as t_edge:
                 cands = localize_edge(img, dcfg)
-            loc_rows += localization_rows(r, cands, t.ms, "edge", dn, cfg)
+            with timer() as t_svm:
+                svm = score_candidates(img, cands, model, dcfg)
+            loc_rows += localization_rows(r, cands, t_edge.ms, "edge", dn, cfg)
+            loc_rows += localization_rows(r, svm, t_edge.ms + t_svm.ms, "edge_svm", dn, cfg)
             if dn == best_dn:
-                top1 = cands[0] if cands else None
+                best = svm if best_method == "edge_svm" else cands
+                top1 = best[0] if best else None
         seg_rows += segmentation_rows(r, img, top1, cfg)
         if i % 25 == 0 or i == len(recs):
             print(f"  {i}/{len(recs)}")
