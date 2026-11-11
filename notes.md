@@ -547,3 +547,56 @@ E6, all_correct ALL (binarize otsu, crop quad):
 | projection | **0.625** | 0.151 | **0.219** |
 
 Crop pred tăng khoảng 40% tương đối nhờ định vị tốt hơn (top-1 R trên test 0.545 → 0.751). Số cca pred 0.195 khớp với E4 (`pred`, quad). Khoảng cách gt → pred vẫn lớn (0.625 → 0.219): ngoài 25% ảnh định vị sai, quad pred lệch trung bình 16 px (E4) cũng làm hỏng crop. Ngay cả trên ảnh định vị đúng, all_correct chỉ 0.259 (E4 `pred_tp`), so với 0.563 khi crop bằng quad thật.
+
+## Triage lỗi
+
+Phần của A (SPEC 2.3), file `experiments/triage_failures.py`, test `tests/test_triage.py`. SPEC không định nghĩa hàm hay định dạng cho bước này, nên thiết kế tối thiểu: đọc `results/predictions/{localization,segmentation}.csv` (E0), mỗi ảnh test gán đúng MỘT bước lỗi chính theo thứ tự pipeline. Chạy: `run_all.py --exp predict --split test` rồi `triage_failures.py`.
+
+Cấu hình: định vị `edge_svm` + `bilateral` (E3/E2 chọn trên tune), crop `quad`, binarize `otsu`, tách `cca` (mặc định config; `--segmenter projection` ghi thêm bảng hậu tố `_otsu_projection`).
+
+Định nghĩa bước lỗi (ưu tiên từ trên xuống):
+
+| bước | điều kiện |
+|---|---|
+| `loc_no_candidate` | không ứng viên top_k nào IoU ≥ 0.5; nhãn phụ `gt_too_small` (area_ratio < 0.008), `gt_too_large` (> 0.16), `other` |
+| `loc_rank` | có ứng viên đúng nhưng không phải top-1 |
+| `rectify` | top-1 đúng, không all_correct, sai số góc quad > ngưỡng |
+| `segment_count` | top-1 đúng, nắn ổn, số hộp ≠ 7 |
+| `segment_position` | đủ 7 hộp nhưng có vị trí không trúng khuôn |
+| `ok` | top-1 đúng và all_correct |
+
+Ngưỡng sai số góc = **22.30 px** = phân vị 95 của corner_error trên tune, trong số ảnh top-1 đúng và tách đúng hết (n = 50 / 159; trung vị 10.84 px; nhóm top-1 đúng nhưng tách sai có trung vị 19.84 px). Nghĩa là vượt khoảng sai số mà ảnh tách tốt chịu được. Ngưỡng chọn trên tune, không đụng test. Ảnh nắn lệch nhưng vẫn tách đúng thì là `ok`, không tính là lỗi. Top-1 sai không bao giờ là `ok`.
+
+Số ảnh test (n = 462), cùng nguồn `results/tables/triage_stage_counts.csv`:
+
+| bước | base (350) | blur (28) | challenge (28) | db (28) | tilt (28) | ALL | % |
+|---|---|---|---|---|---|---|---|
+| loc_no_candidate | 44 | 10 | 14 | 16 | 12 | 96 | 20.8 |
+| loc_rank | 14 | 2 | 0 | 1 | 2 | 19 | 4.1 |
+| rectify | 40 | 4 | 4 | 2 | 9 | 59 | 12.8 |
+| segment_count | 100 | 11 | 7 | 4 | 1 | 123 | 26.6 |
+| segment_position | 67 | 1 | 1 | 2 | 4 | 75 | 16.2 |
+| ok | 85 | 0 | 2 | 3 | 0 | 90 | 19.5 |
+
+Đối chiếu: ok = 90 = all_correct 0.195 của E6 (cca, pred); loc_no_candidate + loc_rank = 115 = 462 − 347 (top-1 edge_svm). Với projection: loc không đổi, rectify 63, segment_count 97, segment_position 87, ok 100 (0.216).
+
+`loc_no_candidate` = 96: 30 ảnh không có ứng viên nào, 66 ảnh có ứng viên nhưng đều IoU < 0.5. Nhãn phụ: `gt_too_small` 12 (base 3, blur 1, challenge 7, db 1), `gt_too_large` 0, `other` 84. Tức bộ lọc area_ratio chỉ giải thích 12/96; phần lớn là ứng viên có mặt nhưng lệch hoặc không có.
+
+Bảng chéo crop gt × crop pred (số ảnh, ALL; cột = bước lỗi của crop pred, hàng = trạng thái tách trên crop gt, `triage_gt_vs_pred.csv`):
+
+| crop gt \ bước pred | loc_no_candidate | loc_rank | rectify | segment_count | segment_position | ok |
+|---|---|---|---|---|---|---|
+| ok (260) | 34 | 8 | 32 | 64 | 56 | 66 |
+| segment_count (182) | 57 | 8 | 21 | 57 | 15 | 24 |
+| segment_position (20) | 5 | 3 | 6 | 2 | 4 | 0 |
+
+Đọc bảng: trong 257 ảnh top-1 đúng nhưng vẫn lỗi (rectify + segment), 152 ảnh tách đúng khi crop gt, nghĩa là lỗi do crop pred (nắn / bbox không khít); 105 ảnh tách sai kể cả crop gt, lỗi do bộ tách. 42 ảnh gt-ok bị loc_no_candidate (34) hoặc loc_rank (8) là lỗi thuần của định vị. 24 ảnh gt lỗi mà pred ok: pred crop tình cờ tốt hơn (viền khác) nên không phải hiếm.
+
+Quan sát định tính (đọc lưới ở `results/failures/<bước>/`, 12 ảnh mỗi bước chọn theo seed 42):
+- `loc_no_candidate`: (1) ứng viên top-1 bao cả biển lẫn phần thân xe/khung (box cao hơn nhiều, IoU thấp dù nhìn bằng mắt là trúng); biển nghiêng bị bbox ngang phạt nặng; (2) biển bị dính vào lưới tản nhiệt / cản nên vùng đóng hình thái không tách ra; (3) ảnh `challenge` nắng gắt, nhợt màu: mặt nạ morph phủ cả nền nhà, biển điểm rất thấp (0.01). 47/96 ảnh có crop pred 0 hộp ký tự.
+- `loc_rank`: 18/19 ảnh biển đúng ở hạng 2. Top-1 hay là chữ hãng xe / logo trên đầu xe (cạnh đứng dày, ví dụ "FORLAND") điểm SVM cao hơn biển thật.
+- `rectify`: quad vẫn dính nền hoặc viền biển nên crop có thêm mảnh dọc ở mép, cho 8–9 hộp hoặc nhiều hộp lẻ; trung bình sai số góc 34.9 px. Nằm nhiều ở `tilt` (9/28) và `base`.
+- `segment_count`: chủ yếu 6 hộp (54/123) do ký tự Hán dính ký tự A (cả crop gt cũng vậy), và 8 hộp (27/123) do mảnh nền / khung biển ở mép; 64/123 ảnh này tách đúng trên crop gt.
+- `segment_position`: đủ 7 hộp nhưng lệch khuôn vài pixel, thường ở ký tự Hán (nét rời, dính A), "1" hẹp và chữ cuối chạm viền; crop pred hơi lệch/co làm cả dãy trượt khỏi khuôn.
+- Theo subset (meta trung bình, `triage_stage_meta.csv`): ảnh `ok` có tilt_h/tilt_v trung bình cao nhất (86 / 82) so với `loc_no_candidate` (48 / 47), `rectify` (66 / 63); blur trung bình ok 58 so với loc_no_candidate 45. Chiều của tilt/blur theo mã hóa CCPD, chỉ dùng so sánh tương đối.
+- `blur` / `challenge` / `tilt` / `db` gần như không có ảnh ok (0–3/28), lỗi rơi chủ yếu ở định vị và nắn; `base` mất nhiều nhất ở tách ký tự (167/350).
