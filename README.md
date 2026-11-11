@@ -94,6 +94,7 @@ Triage lỗi theo bước trên test (SPEC 2.3; cần `results/predictions/*.csv
 PYTHONPATH=src python experiments/run_all.py --exp predict --split test
 PYTHONPATH=src python experiments/triage_failures.py            # bảng tables/triage_*.csv, failures/<bước>/, figures/triage_stages.png
 PYTHONPATH=src python experiments/triage_failures.py --segmenter projection   # chỉ bảng, hậu tố _otsu_projection
+# Lưu ý: triage_failures.py import `_chosen`, `_load_svm`, `segmentation_rows` từ run_all.py (phần của B); đổi tên các hàm này thì triage hỏng.
 ```
 
 Kết quả nằm trong `results/` (predictions, tables, figures, failures).

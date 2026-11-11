@@ -62,3 +62,13 @@ def test_tables_are_exclusive_and_complete():
              & (x["pred_stage"] == "loc_no_candidate")]["n"].iloc[0] == 1
     s = tri.subtag_table(df)
     assert s[(s["subset"] == "ALL") & (s["subtag"] == "gt_too_small")]["n"].iloc[0] == 1
+
+
+def test_image_summary_rank0_row():
+    """Ảnh không có ứng viên chỉ có dòng rank = 0: any_tp False, n_cands 0, best_rank 0."""
+    loc = pd.DataFrame({"image_id": ["a", "b", "b"], "rank": [0, 1, 2], "is_tp": [False, False, True]})
+    s = tri._image_summary(loc).set_index("image_id")
+    assert not s.loc["a", "any_tp"] and not s.loc["a", "top1_tp"]
+    assert s.loc["a", "n_cands"] == 0 and s.loc["a", "best_rank"] == 0
+    assert s.loc["b", "any_tp"] and not s.loc["b", "top1_tp"]
+    assert s.loc["b", "n_cands"] == 2 and s.loc["b", "best_rank"] == 2

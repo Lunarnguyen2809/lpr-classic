@@ -135,7 +135,7 @@ Test (n=462), đo một lần, không chỉnh lại sau đó:
 
 Thời gian (một tiến trình, máy đang tải nên chỉ mang tính tương đối): tune 309 → 426 ms/ảnh, test 269 → 396 ms/ảnh (khoảng +40-50%, do thêm 2 lượt morph + contour + features). Số ứng viên TB mỗi ảnh gần như không đổi (2.0 → 2.05 trên tune).
 
-Trần recall do `area_ratio_range` cận dưới 0.008 (đã kiểm bằng script đếm trên GT bbox): tune 3/198 và test 16/462 bbox GT có area_ratio < 0.008 (test min 0.0032, tune min 0.0054), và 1 bbox GT test > 0.16 (max 0.182). Bộ lọc dùng diện tích minAreaRect của ứng viên (≤ diện tích bbox) nên mất mát thực có thể lớn hơn các con số này.
+Giới hạn do `area_ratio_range` cận dưới 0.008 (đã kiểm bằng script đếm trên GT bbox): tune 3/198 và test 16/462 bbox GT có area_ratio < 0.008 (test min 0.0032, tune min 0.0054), và 1 bbox GT test > 0.16 (max 0.182). Đây không phải trần cứng: bộ lọc xét diện tích minAreaRect của *ứng viên*, không phải của GT, và IoU ≥ 0.5 cho phép ứng viên lớn hơn GT, nên GT nhỏ vẫn có thể được khớp. Triage (mục "Triage lỗi") cho thấy trong 16 GT nhỏ ở test chỉ 12 bị mất ở định vị (`loc_no_candidate`/`gt_too_small`); 4 ảnh còn lại không mất (base_0327 `ok`; base_0251, base_0452 lỗi ở `segment_position`; blur_0034 lỗi ở `segment_count`). GT lớn duy nhất (tilt_0022, 0.182) cũng không mất ở bộ lọc mà là `loc_rank` (ứng viên đúng có mặt, không phải top-1).
 
 Còn yếu: db (ngược sáng/chói) và challenge không cải thiện, n mỗi nhóm nhỏ (12 tune, 28 test) nên chênh lệch ±1-2 ảnh. Chưa thử bù nghiêng trước morph (xoay mặt nạ) cho tilt. Cải thiện top-1 chủ yếu nhờ cận dưới area; muốn nâng thêm cần xếp hạng tốt hơn (score hiện chỉ gồm density, fill, aspect).
 
@@ -477,7 +477,7 @@ Kỷ luật tune/test: E2 và E3 chạy trên tune (198 ảnh) lẫn test (462 �
 | tune | none | 0.598 | 0.571 | 0.584 | 0.657 | 358 |
 | tune | gaussian | 0.630 | 0.601 | 0.615 | 0.682 | 355 |
 | tune | median | 0.637 | 0.611 | 0.624 | 0.697 | 371 |
-| tune | bilateral | 0.775 | 0.748 | 0.761 | 0.828 | 406 |
+| tune | bilateral | 0.775 | 0.747 | 0.761 | 0.828 | 406 |
 | test | none | 0.610 | 0.576 | 0.592 | 0.645 | 353 |
 | test | gaussian | 0.647 | 0.615 | 0.630 | 0.712 | 355 |
 | test | median | 0.616 | 0.584 | 0.600 | 0.699 | 400 |
@@ -502,7 +502,7 @@ Bilateral hơn rõ trên cả hai tập (F1 test 0.705 vs 0.592-0.630). Sau #22 
 | edge_svm | tilt | 28 | 0.583 | 0.500 | 0.538 | 0.500 | 0.571 | 0.571 |
 | edge_svm | ALL | 462 | 0.803 | 0.751 | 0.776 | 0.751 | 0.792 | 0.792 |
 
-Tune ALL: edge F1 0.761 (R@5 0.828), edge_svm F1 0.818 (R@5 0.828). SVM không thêm ứng viên, chỉ xếp lại: R@5 hai bên bằng nhau (0.792 test), cải thiện hoàn toàn nằm ở R@1 (0.682 -> 0.751 test, +32 ảnh: base +29, challenge +1, db +2, tilt +2, blur -2). Trần là R@5 ≈ 0.79: khoảng 21% ảnh test không có ứng viên đúng trong top-5 (db 57%, challenge 50%, tilt 43% thiếu), nên muốn tăng tiếp phải sửa sinh ứng viên chứ không phải xếp hạng. Các nhóm ngoài base chỉ 28 ảnh, chênh ±1-2 ảnh (0.036/ảnh) nên đừng đọc chênh lệch nhỏ ở blur/db/tilt. ms edge_svm = localize_edge + chấm SVM (~+14 ms). Top-1 không lọc theo `score_threshold` (giữ Recall@k).
+Tune ALL: edge F1 0.761 (R@5 0.828), edge_svm F1 0.817 (R@5 0.828). SVM không thêm ứng viên, chỉ xếp lại: R@5 hai bên bằng nhau (0.792 test), cải thiện hoàn toàn nằm ở R@1 (0.682 -> 0.751 test, +32 ảnh: base +29, challenge +1, db +2, tilt +2, blur -2). Trần là R@5 ≈ 0.79: khoảng 21% ảnh test không có ứng viên đúng trong top-5 (db 57%, challenge 50%, tilt 43% thiếu), nên muốn tăng tiếp phải sửa sinh ứng viên chứ không phải xếp hạng. Các nhóm ngoài base chỉ 28 ảnh, chênh ±1-2 ảnh (0.036/ảnh) nên đừng đọc chênh lệch nhỏ ở blur/db/tilt. ms edge_svm = localize_edge + chấm SVM (~+14 ms). Top-1 không lọc theo `score_threshold` (giữ Recall@k).
 
 **E4 nắn** (`tables/e4_rectify.csv`, test, binarize Otsu + CCA, định vị = edge_svm + bilateral). `crop_source`: `gt` crop từ bbox/quad thật, `pred` top-1 trên mọi ảnh (định vị sai tính là hỏng), `pred_tp` chỉ 347 ảnh top-1 đúng IoU ≥ 0.5. corner_error (px ảnh gốc) chỉ tính trên 347 ảnh đó; với crop bbox, quad ngầm là 4 góc bbox pred.
 
@@ -550,7 +550,7 @@ Crop pred tăng khoảng 40% tương đối nhờ định vị tốt hơn (top-1
 
 ## Triage lỗi
 
-Phần của A (SPEC 2.3), file `experiments/triage_failures.py`, test `tests/test_triage.py`. SPEC không định nghĩa hàm hay định dạng cho bước này, nên thiết kế tối thiểu: đọc `results/predictions/{localization,segmentation}.csv` (E0), mỗi ảnh test gán đúng MỘT bước lỗi chính theo thứ tự pipeline. Chạy: `run_all.py --exp predict --split test` rồi `triage_failures.py`.
+Phần của A (SPEC 2.3), file `experiments/triage_failures.py`, test `tests/test_triage.py`. Phụ thuộc: `triage_failures.py` import các hàm của `run_all.py` (phần của B) là `_chosen`, `_load_svm`, `segmentation_rows`; đổi tên hoặc đổi chữ ký các hàm này sẽ làm hỏng triage (test_triage bắt lỗi import). SPEC không định nghĩa hàm hay định dạng cho bước này, nên thiết kế tối thiểu: đọc `results/predictions/{localization,segmentation}.csv` (E0), mỗi ảnh test gán đúng MỘT bước lỗi chính theo thứ tự pipeline. Chạy: `run_all.py --exp predict --split test` rồi `triage_failures.py`.
 
 Cấu hình: định vị `edge_svm` + `bilateral` (E3/E2 chọn trên tune), crop `quad`, binarize `otsu`, tách `cca` (mặc định config; `--segmenter projection` ghi thêm bảng hậu tố `_otsu_projection`).
 
@@ -565,7 +565,7 @@ Cấu hình: định vị `edge_svm` + `bilateral` (E3/E2 chọn trên tune), cr
 | `segment_position` | đủ 7 hộp nhưng có vị trí không trúng khuôn |
 | `ok` | top-1 đúng và all_correct |
 
-Ngưỡng sai số góc = **22.30 px** = phân vị 95 của corner_error trên tune, trong số ảnh top-1 đúng và tách đúng hết (n = 50 / 159; trung vị 10.84 px; nhóm top-1 đúng nhưng tách sai có trung vị 19.84 px). Nghĩa là vượt khoảng sai số mà ảnh tách tốt chịu được. Ngưỡng chọn trên tune, không đụng test. Ảnh nắn lệch nhưng vẫn tách đúng thì là `ok`, không tính là lỗi. Top-1 sai không bao giờ là `ok`.
+Ngưỡng sai số góc = **22.30 px** = phân vị 95 của corner_error trên tune, trong số ảnh top-1 đúng và tách đúng hết (n = 50 / 159; trung vị 10.84 px; nhóm top-1 đúng nhưng tách sai có trung vị 19.84 px). Nghĩa là vượt khoảng sai số mà ảnh tách tốt chịu được. Ngưỡng chọn trên tune, không đụng test. Đơn vị là pixel của ảnh gốc (corner_error tính trên ảnh gốc), nên ngưỡng 22.30 px phụ thuộc kích thước biển trong ảnh; không so trực tiếp với ngưỡng theo tỉ lệ. Ảnh nắn lệch nhưng vẫn tách đúng thì là `ok`, không tính là lỗi. Top-1 sai không bao giờ là `ok`.
 
 Số ảnh test (n = 462), cùng nguồn `results/tables/triage_stage_counts.csv`:
 
@@ -578,7 +578,7 @@ Số ảnh test (n = 462), cùng nguồn `results/tables/triage_stage_counts.csv
 | segment_position | 67 | 1 | 1 | 2 | 4 | 75 | 16.2 |
 | ok | 85 | 0 | 2 | 3 | 0 | 90 | 19.5 |
 
-Đối chiếu: ok = 90 = all_correct 0.195 của E6 (cca, pred); loc_no_candidate + loc_rank = 115 = 462 − 347 (top-1 edge_svm). Với projection: loc không đổi, rectify 63, segment_count 97, segment_position 87, ok 100 (0.216).
+Đối chiếu: ok = 90 = all_correct 0.195 của E6 (cca, pred); loc_no_candidate + loc_rank = 115 = 462 − 347 (top-1 edge_svm). Với projection: loc không đổi, rectify 63, segment_count 97, segment_position 87, ok 100 (0.216). E6 projection pred ghi 0.219 (= 101 ảnh): chênh 1 ảnh là ảnh top-1 sai (nằm ở `loc_*`) nhưng tách đúng cả 7 ký tự một cách tình cờ; triage không bao giờ gán `ok` cho top-1 sai (xem định nghĩa trên), còn E6 đếm theo all_correct bất kể top-1.
 
 `loc_no_candidate` = 96: 30 ảnh không có ứng viên nào, 66 ảnh có ứng viên nhưng đều IoU < 0.5. Nhãn phụ: `gt_too_small` 12 (base 3, blur 1, challenge 7, db 1), `gt_too_large` 0, `other` 84. Tức bộ lọc area_ratio chỉ giải thích 12/96; phần lớn là ứng viên có mặt nhưng lệch hoặc không có.
 
@@ -590,13 +590,44 @@ Bảng chéo crop gt × crop pred (số ảnh, ALL; cột = bước lỗi của 
 | segment_count (182) | 57 | 8 | 21 | 57 | 15 | 24 |
 | segment_position (20) | 5 | 3 | 6 | 2 | 4 | 0 |
 
-Đọc bảng: trong 257 ảnh top-1 đúng nhưng vẫn lỗi (rectify + segment), 152 ảnh tách đúng khi crop gt, nghĩa là lỗi do crop pred (nắn / bbox không khít); 105 ảnh tách sai kể cả crop gt, lỗi do bộ tách. 42 ảnh gt-ok bị loc_no_candidate (34) hoặc loc_rank (8) là lỗi thuần của định vị. 24 ảnh gt lỗi mà pred ok: pred crop tình cờ tốt hơn (viền khác) nên không phải hiếm.
+Đọc bảng: trong 257 ảnh top-1 đúng nhưng vẫn lỗi (rectify + segment), 152 ảnh tách đúng khi crop gt, nghĩa là lỗi do crop pred (nắn / bbox không khít); 105 ảnh tách sai kể cả crop gt, lỗi do bộ tách. 42 ảnh gt-ok bị loc_no_candidate (34) hoặc loc_rank (8) là lỗi thuần của định vị. 24 ảnh có crop gt lỗi (tách sai) nhưng crop pred lại `ok`: crop pred tình cờ cho kết quả tách tốt hơn crop gt (viền cắt khác nên ký tự không dính), tức 24/222 ảnh gt lỗi (11%), không phải hiếm.
 
 Quan sát định tính (đọc lưới ở `results/failures/<bước>/`, 12 ảnh mỗi bước chọn theo seed 42):
 - `loc_no_candidate`: (1) ứng viên top-1 bao cả biển lẫn phần thân xe/khung (box cao hơn nhiều, IoU thấp dù nhìn bằng mắt là trúng); biển nghiêng bị bbox ngang phạt nặng; (2) biển bị dính vào lưới tản nhiệt / cản nên vùng đóng hình thái không tách ra; (3) ảnh `challenge` nắng gắt, nhợt màu: mặt nạ morph phủ cả nền nhà, biển điểm rất thấp (0.01). 47/96 ảnh có crop pred 0 hộp ký tự.
 - `loc_rank`: 18/19 ảnh biển đúng ở hạng 2. Top-1 hay là chữ hãng xe / logo trên đầu xe (cạnh đứng dày, ví dụ "FORLAND") điểm SVM cao hơn biển thật.
-- `rectify`: quad vẫn dính nền hoặc viền biển nên crop có thêm mảnh dọc ở mép, cho 8–9 hộp hoặc nhiều hộp lẻ; trung bình sai số góc 34.9 px. Nằm nhiều ở `tilt` (9/28) và `base`.
+- `rectify`: warp thường cắt cụt hoặc làm lệch biển nên crop thiếu ký tự, không phải thừa hộp. Trong 59 ảnh `rectify`, n_boxes_pred = 0 (8 ảnh), 1 (4), 2 (1), 3 (1), 4 (5), 5 (13), 6 (9), 7 (13), 8 (4), 9 (1): chỉ 5/59 ảnh có 8-9 hộp, 41/59 có ≤ 6 hộp (trung bình 4.75). Sai số góc trung bình 34.9 px. Nằm nhiều ở `tilt` (9/28) và `base`.
 - `segment_count`: chủ yếu 6 hộp (54/123) do ký tự Hán dính ký tự A (cả crop gt cũng vậy), và 8 hộp (27/123) do mảnh nền / khung biển ở mép; 64/123 ảnh này tách đúng trên crop gt.
 - `segment_position`: đủ 7 hộp nhưng lệch khuôn vài pixel, thường ở ký tự Hán (nét rời, dính A), "1" hẹp và chữ cuối chạm viền; crop pred hơi lệch/co làm cả dãy trượt khỏi khuôn.
 - Theo subset (meta trung bình, `triage_stage_meta.csv`): ảnh `ok` có tilt_h/tilt_v trung bình cao nhất (86 / 82) so với `loc_no_candidate` (48 / 47), `rectify` (66 / 63); blur trung bình ok 58 so với loc_no_candidate 45. Chiều của tilt/blur theo mã hóa CCPD, chỉ dùng so sánh tương đối.
-- `blur` / `challenge` / `tilt` / `db` gần như không có ảnh ok (0–3/28), lỗi rơi chủ yếu ở định vị và nắn; `base` mất nhiều nhất ở tách ký tự (167/350).
+- `blur` / `challenge` / `tilt` / `db` gần như không có ảnh ok (0–3/28), lỗi rơi chủ yếu ở định vị và nắn, trừ `blur`: định vị 12 (10 + 2) bằng tách ký tự 12 (11 + 1), không phải chủ yếu ở định vị; `base` mất nhiều nhất ở tách ký tự (167/350).
+
+### Đo lại thời gian (máy ít tải), 2026-11-11
+
+Chạy lại E2 và E7 trên máy ít tải (cùng cấu hình; mọi số P/R/F1/count giống hệt lần trước, chỉ ms khác). Số ms ở các mục E2/E7 phía trên (đo lúc máy tải nặng) chỉ còn giá trị so sánh tương đối; dùng số dưới đây làm số tuyệt đối.
+
+E2 ms/ảnh (localize_edge, test n = 462, tune 198):
+
+| denoise | test | tune |
+|---|---|---|
+| none | 84.7 | 97.4 |
+| gaussian | 82.4 | 95.0 |
+| median | 93.2 | 107.7 |
+| bilateral | 111.1 | 132.5 |
+
+Đảo ngược so với lần đo lúc máy tải: trước đây ghi "chênh thời gian giữa các bộ lọc gần như biến mất" (test 353-414 ms), nay bilateral chậm hơn rõ: +18 ms so với median, +26 ms so với none, +29 ms so với gaussian (test). Chênh cũ nhiều khả năng bị che bởi nhiễu tải máy (không phải do #22 làm mất chênh).
+
+E7 ms/ảnh (test n = 462, dòng ALL, pipeline edge_svm + bilateral + quad + otsu + cca):
+
+| bước | n | mean | p95 |
+|---|---|---|---|
+| preprocess | 462 | 69.8 | 134.3 |
+| localize_other | 462 | 63.5 | 149.3 |
+| hog_svm | 462 | 4.8 | 10.8 |
+| quad | 432 | 0.97 | 2.2 |
+| rectify | 432 | 0.34 | 0.59 |
+| binarize | 432 | 0.10 | 0.18 |
+| segment | 432 | 0.43 | 0.76 |
+| total_edge (không SVM) | 462 | 135.0 | 247.7 |
+| total | 462 | 139.8 | 262.2 |
+
+Theo subset (total): base 143.1, blur 128.9, challenge 88.5, db 92.6, tilt 208.4 ms. Tỉ lệ các bước đã dịch so với lần đo tải nặng: preprocess 44% -> 50% của total (bilateral d = 11), Sobel + morph đa tỉ lệ 51% -> 45%, SVM 3.3% -> 3.4%. Mọi bước sau định vị cộng < 2 ms. Vì tỉ lệ cũng đổi theo tải máy nên không dùng tỉ lệ làm kết luận chắc chắn; tổng thời gian ~140 ms/ảnh (~3x nhanh hơn lần đo tải).
