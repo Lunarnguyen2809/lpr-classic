@@ -2,7 +2,8 @@ r"""Kiểm tra nhanh các file .tex (không thay thế biên dịch thật).
 
 Dùng: python report/check_tex.py <thư mục report>
 Kiểm tra: cân bằng \begin/\end, ngoặc nhọn, đường dẫn \input và \includegraphics,
-ký tự _ # chưa escape ngoài math, ký tự % chưa escape ngoài comment, & ngoài bảng.
+ký tự _ # chưa escape ngoài math, ký tự % chưa escape ngoài comment, & ngoài bảng,
+macro cần gói (\mathbb, \toprule, subfigure, ...) mà preamble chưa \usepackage.
 """
 import re
 import sys
@@ -93,6 +94,21 @@ for f in files:
     # dòng gốc: % không phải comment được strip_comment xử lý; kiểm tra '%' lẻ trong text đã strip
     if re.search(r"(?<!\\)%", text):
         errors.append(f"{f}: còn ký tự % chưa escape")
+
+# macro -> gói cần có (kiểm tra danh sách nhỏ, mở rộng khi cần)
+NEEDS = [(r"\\math(?:bb|frak)\b|\\checkmark\b|\\varnothing\b", "amssymb"),
+         (r"\\begin\{(?:align|gather|cases)\*?\}|\\text\{", "amsmath"),
+         (r"\\(?:top|mid|bottom)rule\b", "booktabs"), (r"\\begin\{subfigure\}", "subcaption"),
+         (r"\\(?:resizebox|includegraphics)\b", "graphicx"), (r"\\(?:textcolor|color)\b", "xcolor"),
+         (r"\\begin\{tikzpicture\}", "tikz")]
+body = "\n".join(strip_comment(line) for f in files for line in f.read_text(encoding="utf-8").splitlines())
+pre = (root / "main.tex").read_text(encoding="utf-8")
+pkgs = set()
+for m in re.finditer(r"\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}", pre):
+    pkgs.update(x.strip() for x in m.group(1).split(","))
+for pat, pkg in NEEDS:
+    if re.search(pat, body) and pkg not in pkgs:
+        errors.append(f"main.tex: dùng macro khớp /{pat}/ nhưng thiếu " + "\\usepackage{" + pkg + "}")
 
 print("\n".join(errors) if errors else "OK: không phát hiện lỗi")
 sys.exit(1 if errors else 0)

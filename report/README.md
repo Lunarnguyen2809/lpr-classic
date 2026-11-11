@@ -16,7 +16,16 @@ Cấu trúc:
 3. Menu (góc trên trái) > Compiler: chọn **XeLaTeX**.
 4. Menu > Main document: `main.tex`. Nhấn Recompile.
 
-Font dùng TeX Gyre Termes / Heros / Cursor (có sẵn trong TeX Live trên Overleaf, hỗ trợ tiếng Việt). Không cần chữ Hán trong văn bản (các chữ Hán nằm trong ảnh).
+Font dùng TeX Gyre Termes / Heros / Cursor, khai báo theo tên file (`texgyretermes-regular.otf`, ...) để chạy được cả trên Overleaf lẫn Tectonic; hỗ trợ tiếng Việt. Gói `amssymb` đã khai báo trong `main.tex` (cần cho `\mathbb`). Không cần chữ Hán trong văn bản (các chữ Hán nằm trong ảnh).
+
+## Biên dịch bằng Tectonic (không cần cài TeX Live)
+
+```
+cd report
+tectonic -X compile main.tex
+```
+
+Bản PDF kèm theo được biên dịch bằng Tectonic (XeTeX), 15 trang, 0 lỗi, 0 tham chiếu thiếu. `check_tex.py` còn kiểm tra macro cần gói (`\mathbb`, `\toprule`, `subfigure`, ...) mà preamble chưa `\usepackage`.
 
 ## Sinh lại bảng và hình
 
@@ -29,5 +38,5 @@ Thư mục CSV là đầu ra của `experiments/run_all.py` và `experiments/tri
 
 ## Ghi chú số liệu
 
-- Mọi số E2/E3/E4/E7 và triage lấy từ CSV, làm tròn 3 chữ số. Bảng resize, quét tham số, Issue #10 và HOG+SVM lấy từ `notes.md` (không có CSV).
-- Thời gian E7 và E2 (ms) đo trên máy ít tải hơn lần ghi trong `notes.md`; báo cáo dùng số từ CSV.
+- Mọi số E2/E3/E4/E7 và triage lấy từ CSV. Quy tắc làm tròn (một lần, half-up): P, R, F1 và các tỉ lệ tính từ số đếm (`tp/fp/fn`, số ảnh) rồi mới làm tròn 3 chữ số, không làm tròn lại từ giá trị 4 chữ số trong CSV (vd. 148/198 = 0.7475 hiển thị 0.747; 1/16 = 0.0625 hiển thị 0.063). Bảng resize, quét tham số, Issue #10 và HOG+SVM lấy từ `notes.md` (không có CSV).
+- Thời gian E7 và E2 (ms) đo trên máy ít tải hơn lần ghi trong `notes.md`; báo cáo dùng số từ CSV, số đo lại ghi ở mục "Đo lại thời gian (máy ít tải)" (2026-11-11) trong `notes.md`. Tỉ lệ giữa các bước cũng dịch theo tải máy (tiền xử lý 44% -> 50%) nên chỉ là gần đúng.
