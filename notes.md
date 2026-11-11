@@ -590,7 +590,7 @@ Bảng chéo crop gt × crop pred (số ảnh, ALL; cột = bước lỗi của 
 | segment_count (182) | 57 | 8 | 21 | 57 | 15 | 24 |
 | segment_position (20) | 5 | 3 | 6 | 2 | 4 | 0 |
 
-Đọc bảng: trong 257 ảnh top-1 đúng nhưng vẫn lỗi (rectify + segment), 152 ảnh tách đúng khi crop gt, nghĩa là lỗi do crop pred (nắn / bbox không khít); 105 ảnh tách sai kể cả crop gt, lỗi do bộ tách. 42 ảnh gt-ok bị loc_no_candidate (34) hoặc loc_rank (8) là lỗi thuần của định vị. 24 ảnh có crop gt lỗi (tách sai) nhưng crop pred lại `ok`: crop pred tình cờ cho kết quả tách tốt hơn crop gt (viền cắt khác nên ký tự không dính), tức 24/222 ảnh gt lỗi (11%), không phải hiếm.
+Đọc bảng: trong 257 ảnh top-1 đúng nhưng vẫn lỗi (rectify + segment), 152 ảnh tách đúng khi crop gt, nghĩa là lỗi do crop pred (nắn / bbox không khít); 105 ảnh tách sai kể cả crop gt, lỗi do bộ tách. 42 ảnh gt-ok bị loc_no_candidate (34) hoặc loc_rank (8) là lỗi thuần của định vị. 24 ảnh có crop gt lỗi (tách sai) nhưng crop pred lại `ok`: crop pred tình cờ cho kết quả tách tốt hơn crop gt (viền cắt khác nên ký tự không dính), tức 24/202 ảnh crop gt lỗi (12%), không phải hiếm.
 
 Quan sát định tính (đọc lưới ở `results/failures/<bước>/`, 12 ảnh mỗi bước chọn theo seed 42):
 - `loc_no_candidate`: (1) ứng viên top-1 bao cả biển lẫn phần thân xe/khung (box cao hơn nhiều, IoU thấp dù nhìn bằng mắt là trúng); biển nghiêng bị bbox ngang phạt nặng; (2) biển bị dính vào lưới tản nhiệt / cản nên vùng đóng hình thái không tách ra; (3) ảnh `challenge` nắng gắt, nhợt màu: mặt nạ morph phủ cả nền nhà, biển điểm rất thấp (0.01). 47/96 ảnh có crop pred 0 hộp ký tự.
