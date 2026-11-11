@@ -532,3 +532,18 @@ Warp quad thắng crop bbox ở mọi cột trên ALL và trên nhóm base: corn
 | total | 462 | 416.3 | 810.0 |
 
 Pipeline đọc denoise/method từ E2/E3 (bilateral, edge_svm) qua `_chosen`, binarize/segment từ config. `localize_other` = t(localize_edge) - t(preprocess gọi riêng), chặn dưới 0, chỉ là ước lượng; khởi động chỉ trên ảnh đầu. Mọi bước sau định vị cộng lại < 8 ms; định vị chiếm ~97% thời gian, trong đó tiền xử lý ~44% (bilateral d = 11 trên ảnh 800 px) và Sobel + morph đa tỉ lệ ~51%; SVM chỉ ~3.3%. 30 ảnh không có ứng viên nên n = 432 ở các bước sau quad. Tilt chậm nhất (total 450 ms), db nhanh nhất (332 ms). **Lưu ý đo:** máy chạy nhiều tiến trình Python khác cùng lúc nên số tuyệt đối cao hơn nhiều so với đo ở E0 (bilateral ~109 ms) và p95 rộng; dùng tỉ lệ giữa các bước, đo lại trên máy rảnh nếu cần số tuyệt đối cho báo cáo.
+
+### E0, E5, E6 chạy lại với phương pháp tốt nhất (edge_svm + bilateral), 2026-11-10, Bích
+
+E0 giờ đọc lựa chọn từ bảng E3 / E2 (trên tune: `edge_svm`, `bilateral`) để crop pred (SPEC 9.5), thay cho `edge` cố định. `localization.csv` có thêm method `edge_svm` × 4 denoise (9466 dòng, trước 4158). Chạy E0 trên test mất ~5.5 phút. Dùng code sau #21, #22, #23 (kernel close đa tỉ lệ, nới bộ lọc, HOG + SVM).
+
+E5 (crop gt) không đổi: otsu 0.563, adaptive 0.509.
+
+E6, all_correct ALL (binarize otsu, crop quad):
+
+| segment | gt | pred (trước: edge, code cũ) | pred (giờ: edge_svm) |
+|---|---|---|---|
+| cca | 0.563 | 0.139 | **0.195** |
+| projection | **0.625** | 0.151 | **0.219** |
+
+Crop pred tăng khoảng 40% tương đối nhờ định vị tốt hơn (top-1 R trên test 0.545 → 0.751). Số cca pred 0.195 khớp với E4 (`pred`, quad). Khoảng cách gt → pred vẫn lớn (0.625 → 0.219): ngoài 25% ảnh định vị sai, quad pred lệch trung bình 16 px (E4) cũng làm hỏng crop. Ngay cả trên ảnh định vị đúng, all_correct chỉ 0.259 (E4 `pred_tp`), so với 0.563 khi crop bằng quad thật.
