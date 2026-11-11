@@ -88,6 +88,15 @@ PYTHONPATH=src python experiments/run_all.py --exp runtime
 PYTHONPATH=src python experiments/measure_localize_recall.py
 ```
 
+Triage lỗi theo bước trên test (SPEC 2.3; cần `results/predictions/*.csv` của `--exp predict`, thiếu bảng E2/E3 thì tự chạy trên tune):
+
+```bash
+PYTHONPATH=src python experiments/run_all.py --exp predict --split test
+PYTHONPATH=src python experiments/triage_failures.py            # bảng tables/triage_*.csv, failures/<bước>/, figures/triage_stages.png
+PYTHONPATH=src python experiments/triage_failures.py --segmenter projection   # chỉ bảng, hậu tố _otsu_projection
+# Lưu ý: triage_failures.py import `_chosen`, `_load_svm`, `segmentation_rows` từ run_all.py (phần của B); đổi tên các hàm này thì triage hỏng.
+```
+
 Kết quả nằm trong `results/` (predictions, tables, figures, failures).
 
 ## Phân công file
@@ -107,5 +116,6 @@ Kết quả nằm trong `results/` (predictions, tables, figures, failures).
 | `experiments/run_all.py`, `notebooks/01_color_spaces.ipynb` | B |
 | `experiments/train_hog_svm.py`, `tests/test_hog_svm.py` | A |
 | `experiments/measure_localize_recall.py` | synaamin |
+| `experiments/triage_failures.py`, `tests/test_triage.py` | A (synaamin) |
 
 Chỉ sửa file mình sở hữu. Muốn đổi file SHARED hoặc chữ ký hàm thì sửa SPEC trước và báo người kia. Tham số đã thử ghi vào [notes.md](notes.md).
