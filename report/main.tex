@@ -1,0 +1,81 @@
+% Biên dịch bằng XeLaTeX (Overleaf: Menu > Compiler > XeLaTeX).
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{TeX Gyre Cursor}[Scale=MatchLowercase]
+\usepackage[vietnamese]{babel}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black,citecolor=blue!50!black}
+
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.1}
+
+% Tên hàm / cột / tham số: dùng \code{...}, gạch dưới phải viết \_ .
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Báo cáo giữa kỳ\\Dự án 9: Phát hiện biển số xe và tách ký tự\\bằng xử lý ảnh cổ điển}
+\author{Nhóm: Châu Anh (synaamin) \& Bích (Lunarnguyen2809)}
+\date{\today}
+
+\begin{document}
+
+% ---- Trang bìa (placeholder, điền thông tin lớp / giảng viên trước khi nộp) ----
+\begin{titlepage}
+  \centering
+  {\large Trường Đại học Khoa học Tự nhiên, ĐHQG Hà Nội (HUS)\par}
+  \vspace{0.5cm}
+  {\large Môn học: \underline{\hspace{5cm}}\par}
+  \vspace{2cm}
+  {\LARGE\bfseries Dự án 9\par}
+  \vspace{0.4cm}
+  {\Large Phát hiện biển số xe và tách ký tự\\bằng xử lý ảnh cổ điển (không học sâu)\par}
+  \vspace{0.4cm}
+  {\large Dữ liệu: tập con CCPD2019\par}
+  \vspace{2cm}
+  {\large Báo cáo giữa kỳ\par}
+  \vspace{2cm}
+  {\large Nhóm thực hiện:\\[4pt]
+   Châu Anh (synaamin)\\
+   Bích (Lunarnguyen2809)\par}
+  \vspace{1.5cm}
+  {\large Giảng viên hướng dẫn: \underline{\hspace{5cm}}\par}
+  \vfill
+  {\large \today\par}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% ---- Phần A (Châu Anh): tiền xử lý, định vị, nắn phối cảnh, thời gian, triage lỗi ----
+\input{sections/a_method}
+\input{sections/a_results}
+\input{sections/a_discussion}
+
+% ---- Phần B (Bích) ----
+% TODO(B): thêm các section của Bích vào thư mục sections/ rồi bỏ dấu % ở dòng tương ứng.
+% TODO(B): phân tích hệ màu (E1)           -> \input{sections/b_color}
+% TODO(B): nhị phân hóa Otsu/adaptive (E5) -> \input{sections/b_binarize}
+% TODO(B): tách ký tự CCA/projection (E6)  -> \input{sections/b_segment}
+% TODO(B): ảnh VN tự chụp, định tính (E8)  -> \input{sections/b_vn}
+% \input{sections/b_color}
+% \input{sections/b_binarize}
+% \input{sections/b_segment}
+% \input{sections/b_vn}
+
+% TODO(B): kết luận chung và tài liệu tham khảo (nếu cần) đặt ở đây.
+
+\end{document}

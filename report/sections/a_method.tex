@@ -1,0 +1,144 @@
+\section{Phần A: Phương pháp (tiền xử lý, định vị, nắn phối cảnh)}
+\label{sec:a-method}
+
+Phần này mô tả các bước do thành viên A phụ trách: tiền xử lý ảnh, định vị biển số bằng đặc trưng cạnh và hình thái học, chấm điểm lại ứng viên bằng HOG và SVM tuyến tính, nắn biển về hình chữ nhật chuẩn bằng phép biến đổi phối cảnh, cùng các độ đo dùng cho phần kết quả. Hai bước sau của pipeline (nhị phân hóa và tách ký tự) do thành viên B trình bày.
+
+\subsection{Dữ liệu và luồng xử lý}
+
+Dự án chỉ dùng xử lý ảnh cổ điển, không dùng học sâu. Dữ liệu là một tập con của CCPD2019 gồm 660 ảnh có biển xanh Trung Quốc 7 ký tự: nhóm \code{base} 500 ảnh và bốn nhóm khó \code{tilt}, \code{blur}, \code{db} (ngược sáng hoặc chói), \code{challenge}, mỗi nhóm 40 ảnh. Ảnh được chia cố định (seed 42) thành tập \emph{tune} (30\%, 198 ảnh) dùng để chọn tham số và huấn luyện, và tập \emph{test} (70\%, 462 ảnh) chỉ dùng để báo cáo (Bảng~\ref{tab:split}). Mỗi ảnh có đúng một biển.
+
+\begin{table}[htbp]
+\centering
+\caption{Chia tập dữ liệu (số ảnh).}
+\label{tab:split}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+ & base & tilt & blur & db & challenge & Tổng \\
+\midrule
+tune & 150 & 12 & 12 & 12 & 12 & 198 \\
+test & 350 & 28 & 28 & 28 & 28 & 462 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Luồng xử lý một ảnh được tóm tắt ở Hình~\ref{fig:pipeline}. Phương pháp A dùng trực tiếp ứng viên có điểm heuristic cao nhất; phương pháp A+SVM xếp lại tối đa 5 ứng viên theo điểm của SVM rồi lấy ứng viên đầu. Biển được nắn về ảnh $220\times 70$ trước khi sang phần B.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=5mm and 7mm,
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=11mm, text width=27mm, font=\scriptsize},
+  boxB/.style={draw, dashed, rounded corners=2pt, align=center, minimum height=11mm, text width=27mm, font=\scriptsize},
+  arr/.style={-{Stealth[length=2mm]}, thick}]
+  \node[box] (in) {Ảnh xe (BGR)};
+  \node[box, right=of in] (pre) {Tiền xử lý\\resize rộng 800, xám,\\CLAHE, lọc nhiễu};
+  \node[box, right=of pre] (edge) {Định vị theo cạnh\\Sobel-x, Otsu, close/open,\\contour, lọc, NMS};
+  \node[box, right=of edge] (svm) {HOG + SVM\\(chỉ A+SVM)\\xếp lại top-5};
+  \node[box, below=of svm] (top1) {Chọn ứng viên top-1\\(bbox + quad)};
+  \node[box, left=of top1] (quad) {Ước lượng quad\\approxPolyDP trên\\mặt nạ xanh};
+  \node[box, left=of quad] (warp) {Homography\\về ảnh $220\times 70$};
+  \node[boxB, left=of warp] (partb) {Phần B\\nhị phân hóa,\\tách ký tự};
+  \draw[arr] (in) -- (pre);
+  \draw[arr] (pre) -- (edge);
+  \draw[arr] (edge) -- (svm);
+  \draw[arr] (svm) -- (top1);
+  \draw[arr] (top1) -- (quad);
+  \draw[arr] (quad) -- (warp);
+  \draw[arr] (warp) -- (partb);
+\end{tikzpicture}
+\caption{Pipeline phần A. Phương pháp A đi thẳng từ khối định vị sang chọn top-1, bỏ qua khối HOG + SVM.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Tiền xử lý}
+\label{sec:preprocess}
+
+Ảnh gốc được đưa về chiều rộng 800 pixel, giữ tỉ lệ (nội suy diện tích khi thu nhỏ, tuyến tính khi phóng to), rồi đổi sang ảnh xám. Sau đó áp dụng CLAHE (giới hạn tương phản 2.0, lưới $8\times 8$) để cân bằng sáng cục bộ, và cuối cùng là một bộ khử nhiễu. Bốn bộ lọc được so sánh ở thí nghiệm E2:
+\begin{itemize}
+  \item \code{none}: không lọc;
+  \item \code{gaussian}: Gauss, kernel $5\times 5$;
+  \item \code{median}: trung vị, kernel $5\times 5$;
+  \item \code{bilateral}: song phương, đường kính 11, $\sigma_{\text{color}}=17$, $\sigma_{\text{space}}=17$. Bộ lọc này làm mịn vùng phẳng nhưng giữ cạnh có chênh lệch độ sáng lớn.
+\end{itemize}
+Mọi tham số của bước định vị phía sau (kernel hình thái, ngưỡng diện tích) tính theo ảnh đã resize về 800 pixel nên không phụ thuộc kích thước ảnh gốc.
+
+\subsection{Định vị dựa trên cạnh (phương pháp A)}
+\label{sec:edge}
+
+Ý tưởng: vùng biển số chứa nhiều nét đứng dày đặc (cạnh các ký tự), nên đạo hàm theo trục $x$ lớn tập trung ở một vùng chữ nhật nằm ngang. Các bước:
+\begin{enumerate}
+  \item \textbf{Cạnh.} Tính $|G_x|$ bằng Sobel theo $x$ (kernel 3), chuẩn hóa về $[0,255]$ rồi nhị phân hóa bằng Otsu.
+  \item \textbf{Hình thái học.} Phép \emph{close} với kernel chữ nhật nằm ngang ($21\times 5$, rộng $\times$ cao) để nối các nét ký tự thành một khối, sau đó phép \emph{open} $3\times 3$ để bỏ nhiễu nhỏ.
+  \item \textbf{Đa tỉ lệ.} Lặp lại bước close/open với hai kernel phụ $13\times 3$ và $33\times 7$. Biển bị vỡ thành mảnh ở kernel này có thể liền khối ở kernel khác. Ứng viên từ ba kernel được gộp lại bằng NMS trên bbox (ngưỡng IoU 0.5, giữ điểm cao hơn).
+  \item \textbf{Ứng viên.} Với mỗi contour ngoài của mặt nạ, lấy hình chữ nhật xoay nhỏ nhất (\code{minAreaRect}); bbox ngang là hình bao của nó, quad là bốn đỉnh sắp theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái.
+  \item \textbf{Lọc theo đặc trưng hình học.} Với mỗi ứng viên tính: tỉ lệ cạnh dài/ngắn (\code{aspect}), diện tích hình chữ nhật so với diện tích ảnh (\code{area\_ratio}), tỉ lệ pixel mặt nạ trong hình chữ nhật (\code{fill\_ratio}), tỉ lệ pixel cạnh nhị phân trong hình chữ nhật (\code{edge\_density}) và góc nghiêng. Giữ ứng viên thỏa các ngưỡng ở Bảng~\ref{tab:edgeparams}.
+  \item \textbf{Điểm heuristic.} Điểm của ứng viên là
+  \begin{equation}
+    s = 0.4\,d + 0.3\,f + 0.3\exp\!\left(-\frac{\ln^2(a/3.14)}{2\cdot 0.3^2}\right),
+  \end{equation}
+  trong đó $d$ là \code{edge\_density}, $f$ là \code{fill\_ratio}, $a$ là \code{aspect}; số hạng cuối bằng 1 khi $a\approx 440/140\approx 3.14$, đúng tỉ lệ biển xanh. Giữ tối đa $k=5$ ứng viên điểm cao nhất, quy đổi tọa độ về ảnh gốc bằng cách chia cho hệ số resize.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\caption{Tham số của bước định vị dựa trên cạnh (cấu hình chốt, tính trên ảnh rộng 800 px).}
+\label{tab:edgeparams}
+\small
+\begin{tabular}{ll}
+\toprule
+Tham số & Giá trị \\
+\midrule
+Sobel & theo $x$, kernel 3 \\
+close chính / phụ (rộng $\times$ cao) & $21\times 5$ / $13\times 3$, $33\times 7$ \\
+open & $3\times 3$ \\
+NMS IoU (bbox) & 0.5 \\
+\code{aspect} & $[1.5,\ 7.0]$ \\
+\code{area\_ratio} & $[0.008,\ 0.16]$ \\
+\code{fill\_ratio} tối thiểu & 0.4 \\
+\code{edge\_density} tối thiểu & 0.12 \\
+Góc nghiêng tối đa & $30^\circ$ \\
+Số ứng viên giữ lại $k$ & 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Các ngưỡng này được chọn bằng cách quét trên tập tune (mục~\ref{sec:tuning}). Riêng cận dưới của \code{area\_ratio} bám theo phân bố diện tích bbox thật trên tune (phân vị 5\% là 0.0116, lớn nhất 0.153), nhằm loại logo và chữ nhỏ.
+
+\subsection{Chấm điểm lại ứng viên bằng HOG và SVM (A+SVM)}
+\label{sec:hogsvm}
+
+Điểm heuristic chỉ gồm mật độ cạnh, độ lấp đầy và tỉ lệ cạnh nên dễ xếp nhầm chữ hãng xe hay logo lên trên biển thật. Bước này thay điểm đó bằng điểm của bộ phân loại học từ ảnh:
+\begin{itemize}
+  \item \textbf{Đặc trưng.} Cắt bbox của ứng viên trên ảnh xám, resize về $128\times 32$ (rộng $\times$ cao), trích HOG: 9 hướng, ô $8\times 8$ pixel, khối $2\times 2$ ô, chuẩn hóa L2-Hys, vector $D=1620$ chiều.
+  \item \textbf{Mẫu dương.} Crop bbox thật của 198 ảnh tune.
+  \item \textbf{Mẫu âm.} Với mỗi mẫu dương lấy 3 mẫu âm: ưu tiên ứng viên sai của \code{localize\_edge} có IoU với bbox thật dưới 0.3, nếu thiếu thì bù bằng vùng ngẫu nhiên (rộng 8--45\% chiều rộng ảnh, tỉ lệ cạnh trong \code{aspect}, IoU dưới 0.3). Tổng cộng 198 dương và 594 âm.
+  \item \textbf{Bộ phân loại.} SVM tuyến tính (\code{LinearSVC}, $C=1$, seed 42). Điểm của ứng viên là giá trị hàm quyết định; các ứng viên được sắp giảm dần theo điểm này. Không dùng ngưỡng điểm để loại ứng viên, nhằm tính được Recall@$k$.
+  \item \textbf{Kiểm chứng chéo.} 5 fold phân tầng trên tập mẫu của tune để ước lượng chất lượng phân loại patch.
+\end{itemize}
+SVM chỉ xếp lại tối đa 5 ứng viên mà bước cạnh đã sinh ra, nên nó không thể cứu ảnh mà bước cạnh không sinh ứng viên đúng. Mô hình chỉ huấn luyện trên tune; mã nguồn từ chối dữ liệu không thuộc tune.
+
+\subsection{Nắn phối cảnh}
+\label{sec:rectify}
+
+Ứng viên top-1 cho một bbox ngang và một quad. Biển nghiêng hoặc chụp xiên có quad không phải hình chữ nhật ngang, nên cắt bbox giữ lại nền và làm ký tự méo. Phép nắn đưa biển về ảnh chuẩn $220\times 70$ (tỉ lệ $\approx 3.14$, khớp biển xanh $440\times 140$ mm). Có hai cách lấy quad:
+\begin{itemize}
+  \item \code{minarearect}: dùng luôn bốn đỉnh \code{minAreaRect} của ứng viên;
+  \item \code{approxpoly} (mặc định): tinh chỉnh bốn góc từ màu biển. Trong bbox nới thêm 15\%, tạo mặt nạ màu xanh dương trong HSV ($H\in[95,135]$, $S\ge 70$, $V\ge 40$), đóng và mở hình thái, giới hạn mặt nạ trong quad ứng viên (tránh rò sang nền xanh), lấy contour lớn nhất chứa tâm bbox, bao lồi, rồi \code{approxPolyDP} với $\varepsilon$ tăng từ 1\% đến 15\% chu vi (bước 0.5\%) tới khi còn đúng 4 đỉnh. Nếu không ra 4 đỉnh, quad không lồi hoặc diện tích ngoài khoảng $30\%$--$300\%$ diện tích bbox thì lùi về quad \code{minAreaRect}.
+\end{itemize}
+Với bốn góc nguồn $\mathbf{p}_i$ (sắp theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái) và bốn góc đích $(0,0)$, $(219,0)$, $(219,69)$, $(0,69)$, ma trận homography $H\in\mathbb{R}^{3\times 3}$ thỏa $\tilde{\mathbf{x}}'\sim H\tilde{\mathbf{x}}$ (tọa độ thuần nhất) được giải từ bốn cặp điểm, rồi áp dụng nội suy tuyến tính, viền lặp pixel biên. Phương án đối chứng là cắt bbox ngang rồi resize về $220\times 70$ (\code{bbox}), không bù được độ nghiêng.
+
+\subsection{Độ đo}
+\label{sec:metrics}
+
+\textbf{Định vị.} Với hai bbox $A$, $B$: $\mathrm{IoU}=|A\cap B|/|A\cup B|$. Mỗi ảnh có một biển và ta lấy ứng viên điểm cao nhất (top-1). Ảnh là TP nếu IoU của top-1 với bbox thật $\ge 0.5$; FP nếu có dự đoán nhưng IoU $<0.5$; FN nếu IoU $<0.5$ hoặc không có ứng viên nào. Khi đó
+\[
+P=\frac{TP}{TP+FP},\qquad R=\frac{TP}{TP+FN},\qquad F_1=\frac{2PR}{P+R}.
+\]
+Vì mỗi ảnh có đúng một biển nên $R$ chính là Recall@1. \textbf{Recall@$k$} là tỉ lệ ảnh có ít nhất một ứng viên trong $k$ ứng viên đầu với IoU $\ge 0.5$; Recall@5 cũng là \code{cand\_recall} (trần mà bước xếp hạng có thể đạt), giúp tách lỗi ``không sinh ra ứng viên đúng'' khỏi lỗi ``xếp hạng sai''.
+
+\textbf{Nắn biển.} Sai số góc (\code{corner\_error}) là khoảng cách Euclid trung bình giữa bốn góc tương ứng của quad dự đoán và quad thật, tính bằng pixel của ảnh gốc, chỉ tính trên ảnh định vị đúng (top-1 có IoU $\ge 0.5$). Với phương án cắt bbox, quad ngầm định là bốn góc của bbox dự đoán.
+
+\textbf{Chất lượng tách ký tự (dùng trong E4).} Theo định nghĩa của dự án (do B phụ trách phần tách): \code{count\_match} là tỉ lệ ảnh có đủ 7 hộp ký tự; \code{pos0} là tỉ lệ biển có ký tự Hán (vị trí 0) trúng khuôn vị trí chuẩn; \code{pos1--6} là tỉ lệ trung bình các vị trí 1 đến 6 trúng khuôn; \code{all\_correct} là đồng thời đủ 7 hộp và cả 7 vị trí đúng. E4 báo ba nguồn crop: \code{gt} (crop từ bbox hoặc quad thật, tách riêng lỗi của bộ tách), \code{pred} (crop từ top-1 trên mọi ảnh, định vị sai tính là hỏng) và \code{pred\_tp} (chỉ các ảnh top-1 đúng).
+
+\textbf{Kỷ luật tune và test.} Mọi tham số và lựa chọn phương pháp được chọn chỉ dựa trên tập tune: bộ lọc ở E2 và phương pháp ở E3 được chọn theo F1 trên toàn tune, hòa thì theo thứ tự cố định; SVM chỉ huấn luyện trên tune; ngưỡng chia lỗi ở mục triage tính trên tune. Tập test chỉ dùng để báo cáo, không chỉnh lại tham số sau khi xem số test.
