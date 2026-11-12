@@ -90,6 +90,14 @@ PYTHONPATH=src python experiments/measure_localize_recall.py
 
 Kết quả nằm trong `results/` (predictions, tables, figures, failures).
 
+## Notebook demo pipeline
+
+`notebooks/02_pipeline_demo.ipynb` minh hoạ từng bước (tiền xử lý, Sobel + morph, ứng viên + NMS, SVM rerank, warp, nhị phân, tách ký tự, so với GT) trên 4 ảnh test cố định. Cần `data/ccpd_subset/` và `models/svm.joblib` (train bằng `experiments/train_hog_svm.py` ở trên). Chạy lại và lưu kèm output:
+
+```bash
+python -m jupyter nbconvert --to notebook --execute --inplace notebooks/02_pipeline_demo.ipynb
+```
+
 ## Phân công file
 
 | File | Chủ |
