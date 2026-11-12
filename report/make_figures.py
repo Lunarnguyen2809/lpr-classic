@@ -223,7 +223,7 @@ def main():
     v5 = [float(sel[("edge", s)]["recall_at_5"]) for s in SUBSETS]
     ax.bar(x - w / 2, v1, w, color="#a7c7ee", label="edge, R@1")
     ax.bar(x + w / 2, v2, w, color="#c3a6e0", label="edge_svm, R@1")
-    ax.scatter(x, v5, marker="_", s=900, color="#444444", zorder=3, label="R@5 (trần xếp hạng)")
+    ax.hlines(v5, x - w, x + w, colors="#444444", linewidth=1.6, zorder=3, label="R@5 (trần: biển đúng có trong top-5)")
     for xi, a, b in zip(x, v1, v2):  # nhãn giá trị đặt trong thân cột để không đè vạch R@5
         ax.text(xi - w / 2, a - 0.05, f"{a:.2f}", ha="center", va="center", fontsize=7, color="#222222")
         ax.text(xi + w / 2, b - 0.05, f"{b:.2f}", ha="center", va="center", fontsize=7, color="#222222")
@@ -232,10 +232,10 @@ def main():
     ax.set_ylim(0, 1.0)
     ax.set_ylabel("Recall (IoU >= 0.5), tập test")
     ax.spines[["top", "right"]].set_visible(False)
-    ax.legend(fontsize=7, frameon=False, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.17))
+    ax.legend(fontsize=7, frameon=False, ncol=3, loc="lower center", bbox_to_anchor=(0.5, 1.0))
     fig.tight_layout()
     (rep / "figures").mkdir(exist_ok=True)
-    fig.savefig(rep / "figures" / "e3_subset_r1.png")
+    fig.savefig(rep / "figures" / "e3_subset_r1.png", bbox_inches="tight")
     print("ok")
 
 
