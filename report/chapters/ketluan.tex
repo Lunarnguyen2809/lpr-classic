@@ -1,0 +1,17 @@
+\chapter{KẾT LUẬN}
+\label{chap:conclusion}
+
+Báo cáo trình bày phần A của dự án: tiền xử lý, định vị biển số bằng cạnh và hình thái học (có xếp hạng lại bằng HOG và SVM tuyến tính), nắn phối cảnh, và triage lỗi theo bước pipeline, trên tập con 660 ảnh CCPD2019 chia thành tune (198 ảnh) và test (462 ảnh).
+
+Các kết quả chính trên tập test, ngưỡng IoU $\geq 0.5$:
+\begin{itemize}
+  \item Bộ lọc bilateral được chọn trên tune và cho F1 định vị cao hơn rõ rệt so với ba bộ lọc còn lại (0.705 so với 0.592--0.630 trên test).
+  \item Sau khi tinh chỉnh bước định vị (Issue \#10), Recall@1 của \code{edge} tăng từ 0.545 lên 0.682 và \code{cand\_recall} từ 0.667 lên 0.792. Xếp hạng lại bằng SVM nâng Recall@1 lên 0.751 (315 $\to$ 347 ảnh trúng); Recall@5 giữ nguyên 0.792, nên còn khoảng 21\% ảnh không có ứng viên đúng trong top-5.
+  \item Nắn bằng warp quad tốt hơn cắt bbox ở mọi cột trên ALL: sai số góc giảm từ 25.2 xuống 16.3 px, và \code{all\_correct} trên các ảnh top-1 đúng tăng từ 0.124 lên 0.259 (crop \code{gt}: 0.262 lên 0.563).
+  \item Triage: chỉ 19.5\% ảnh test đi hết pipeline đúng (90/462). Lỗi lớn nhất là tách ký tự (42.8\%), kế đến là định vị (24.9\%) và nắn (12.8\%).
+  \item Thời gian trung bình 139.8 ms/ảnh, trong đó định vị chiếm gần như toàn bộ.
+\end{itemize}
+
+Các hạn chế chính: các nhóm khó chỉ có 28 ảnh test nên so sánh giữa các nhóm có độ bất định lớn; số CV và số tune của SVM lạc quan; lợi ích của \code{approxpoly} so với \code{minarearect} không có ý nghĩa thống kê; thời gian đo trên máy không chuyên dụng. Hướng cải thiện ưu tiên là bổ sung khâu sinh ứng viên (theo màu biển hoặc bù nghiêng trước bước morph, chưa thử), thêm mẫu âm khó cho SVM, nắn chính xác hơn, và dùng IoU đa giác (mục~\ref{sec:limits} và phần hướng cải thiện ở Chương~\ref{chap:a-discussion}).
+
+\TODO{Kết luận chung của cả nhóm sau khi có phần của Bích (Chương~\ref{chap:b})}

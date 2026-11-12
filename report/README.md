@@ -1,31 +1,26 @@
-# Báo cáo giữa kỳ, phần A (LaTeX)
+# Báo cáo giữa kỳ, phần A (LaTeX, mẫu báo cáo HUS, pdfLaTeX)
 
 Cấu trúc:
 
-- `main.tex`: preamble, trang bìa (placeholder), `\input` các section. Phần của Bích để sẵn dòng `% TODO(B)`.
-- `sections/a_method.tex`, `a_results.tex`, `a_discussion.tex`: phần A.
-- `tables/*.tex`: bảng sinh tự động từ CSV kết quả (chỉ phần `tabular`).
-- `figures/`: hình dùng trong báo cáo.
+- `main.tex`: preamble theo mẫu HUS (extbook 13pt, T5, babel vietnamese, mathptmx), trang bìa, bảng phân công, xác nhận, mục lục, danh mục hình và bảng, `\include` các chương, tài liệu tham khảo (`thebibliography`). Thông tin bìa (môn, giảng viên, học kỳ, tên và MSSV) khai báo bằng macro ở đầu file; `\TODO{...}` hiện chữ đỏ, chỉ còn dùng cho phần của Bích.
+- `chapters/ch1_gioithieu.tex`: bài toán, dữ liệu, chia tập, độ đo.
+- `chapters/ch2_phuongphap_a.tex`, `ch3_ketqua_a.tex`, `ch4_phantichloi.tex`: phần A (phương pháp, kết quả, phân tích lỗi).
+- `chapters/ch5_phan_b.tex`: chương dành cho Bích (E1, E5, E6, E8), hiện là `\TODO`.
+- `chapters/ketluan.tex`: kết luận.
+- `tables/*.tex`: bảng sinh tự động từ CSV (mỗi file là một môi trường `table` đầy đủ: caption, label, hàng tiêu đề xanh chữ trắng đậm).
+- `figures/`, `image/HUS.png`: hình và logo.
 - `make_figures.py`: sinh `tables/*.tex` và `figures/e3_subset_r1.png`.
-- `check_tex.py`: kiểm tra nhanh (cân bằng `\begin`/`\end`, ngoặc, đường dẫn `\input`/`\includegraphics`, ký tự `_ % &` chưa escape).
+- `check_tex.py`: kiểm tra nhanh (gói chỉ dành cho XeLaTeX như `fontspec`, ký tự Unicode không an toàn với T5, cân bằng `\begin`/`\end`, ngoặc, đường dẫn `\input`/`\include`/`\includegraphics`, `\ref`/`\cite` có đích, ký tự `_ # % &` chưa escape, macro cần gói).
 
 ## Biên dịch trên Overleaf
 
-1. Nén cả thư mục `report/` thành zip (hoặc dùng file zip đã có).
+1. Nén nội dung thư mục `report/` thành zip sao cho `main.tex` nằm ở gốc zip.
 2. Overleaf: New Project > Upload Project > chọn file zip.
-3. Menu (góc trên trái) > Compiler: chọn **XeLaTeX**.
-4. Menu > Main document: `main.tex`. Nhấn Recompile.
+3. Menu > Compiler: **pdfLaTeX** (mặc định). Menu > Main document: `main.tex`. Nhấn Recompile.
 
-Font dùng TeX Gyre Termes / Heros / Cursor, khai báo theo tên file (`texgyretermes-regular.otf`, ...) để chạy được cả trên Overleaf lẫn Tectonic; hỗ trợ tiếng Việt. Gói `amssymb` đã khai báo trong `main.tex` (cần cho `\mathbb`). Không cần chữ Hán trong văn bản (các chữ Hán nằm trong ảnh).
+Không dùng `fontspec`/XeLaTeX. Văn bản chỉ chứa chữ Latin và dấu tiếng Việt (UTF-8, T5); ký hiệu đặc biệt viết bằng lệnh LaTeX (`$\geq$`, `$\rightarrow$`, `\textendash`). Chữ Hán chỉ nằm trong ảnh.
 
-## Biên dịch bằng Tectonic (không cần cài TeX Live)
-
-```
-cd report
-tectonic -X compile main.tex
-```
-
-Bản PDF kèm theo được biên dịch bằng Tectonic (XeTeX), 15 trang, 0 lỗi, 0 tham chiếu thiếu. `check_tex.py` còn kiểm tra macro cần gói (`\mathbb`, `\toprule`, `subfigure`, ...) mà preamble chưa `\usepackage`.
+Lưu ý: bản này chưa được biên dịch bằng pdfLaTeX trong môi trường phát triển (máy không có đủ gói TeX); đã kiểm tra tĩnh bằng `check_tex.py`. Cần Recompile trên Overleaf để xác nhận, rồi sửa nếu có cảnh báo.
 
 ## Sinh lại bảng và hình
 

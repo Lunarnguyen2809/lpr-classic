@@ -1,4 +1,4 @@
-"""Sinh bảng LaTeX (report/tables/*.tex) và hình E3 (report/figures/e3_subset_r1.png) từ CSV kết quả.
+"""Sinh bảng LaTeX (report/tables/*.tex, mỗi file là một môi trường table đầy đủ: caption, label, màu tiêu đề) và hình E3 (report/figures/e3_subset_r1.png) từ CSV kết quả.
 
 Cách dùng: python report/make_figures.py <thư mục assets chứa tables/*.csv> [thư mục report]
 Quy tắc làm tròn (một lần, half-up, dùng chung cho mọi bảng): P, R, F1 và các tỉ lệ lấy theo số đếm
@@ -13,6 +13,30 @@ from fractions import Fraction
 from pathlib import Path
 
 getcontext().prec = 40
+
+CAPS = {
+    "t_e2": dict(label="tab:e2", wide=False,
+               short=r"""E2: bộ lọc nhiễu, \code{localize\_edge}""",
+               caption=r"""E2: bộ lọc nhiễu, \code{localize\_edge}, dòng ALL. Đậm là bộ lọc được chọn trên tune. Nguồn: \code{e2\_filters.csv}."""),
+    "t_e3": dict(label="tab:e3", wide=False,
+               short=r"""E3: định vị theo nhóm (test)""",
+               caption=r"""E3: định vị theo nhóm, tập test, bộ lọc bilateral. Nguồn: \code{e3\_localization.csv}."""),
+    "t_e4": dict(label="tab:e4", wide=True,
+               short=r"""E4: cắt bbox so với warp quad (test, ALL)""",
+               caption=r"""E4: cắt bbox so với warp quad, tập test, dòng ALL. Sai số góc tính theo pixel ảnh gốc trên 347 ảnh top-1 đúng. Nguồn: \code{e4\_rectify.csv}."""),
+    "t_e4_subset": dict(label="tab:e4sub", wide=True,
+               short=r"""E4 theo nhóm, ảnh top-1 đúng (test)""",
+               caption=r"""E4 theo nhóm, chỉ ảnh top-1 đúng (\code{pred\_tp}), tập test. \code{corner}: sai số góc trung bình (px); \code{count}: \code{count\_match}; \code{all}: \code{all\_correct}. Nguồn: \code{e4\_rectify.csv}."""),
+    "t_e7": dict(label="tab:e7", wide=False,
+               short=r"""E7: thời gian từng bước (test, ALL)""",
+               caption=r"""E7: thời gian từng bước, tập test, dòng ALL (ms/ảnh). Nguồn: \code{e7\_runtime.csv}. Bước ``Sobel, morph, lọc, NMS'' được ước lượng bằng hiệu thời gian \code{localize\_edge} trừ thời gian tiền xử lý đo riêng. 30 ảnh không có ứng viên nên các bước sau định vị chỉ có $n=432$."""),
+    "t_triage": dict(label="tab:triage", wide=True,
+               short=r"""Số ảnh test theo bước lỗi chính và nhóm""",
+               caption=r"""Số ảnh test theo bước lỗi chính và nhóm (trong ngoặc là số ảnh của nhóm); cột cuối là phần trăm trên toàn test ($n=462$). Nguồn: \code{triage\_stage\_counts.csv}."""),
+    "t_triage_cross": dict(label="tab:cross", wide=True,
+               short=r"""Crop \code{gt} so với bước lỗi trên crop \code{pred}""",
+               caption=r"""Trạng thái trên crop \code{gt} (hàng) so với bước lỗi trên crop \code{pred} (cột), số ảnh test, cộng các nhóm base, blur, challenge, db, tilt. Nguồn: \code{triage\_gt\_vs\_pred.csv}."""),
+}
 
 SUBSETS = ["base", "blur", "challenge", "db", "tilt", "ALL"]
 STAGES = ["loc_no_candidate", "loc_rank", "rectify", "segment_count", "segment_position", "ok"]
@@ -67,13 +91,22 @@ def prf(r):
 
 
 def tab(cols, header, rows, out):
-    lines = [r"\begin{tabular}{" + cols + "}", r"\toprule", " & ".join(header) + r" \\", r"\midrule"]
+    """Ghi một môi trường table (caption trên, tiêu đề xanh chữ trắng đậm, dòng xen kẽ)."""
+    key = Path(out).stem
+    c = CAPS[key]
+    body = [r"\begin{tabular}{" + cols + "}", r"\toprule",
+            r"\rowcolor{tableheader} " + " & ".join(r"\tblhd{" + h + "}" for h in header) + r" \\", r"\midrule"]
     for r in rows:
         if r == "MID":
-            lines.append(r"\midrule")
+            body.append(r"\midrule")
         else:
-            lines.append(" & ".join(r) + r" \\")
-    lines += [r"\bottomrule", r"\end{tabular}", ""]
+            body.append(" & ".join(r) + r" \\")
+    body += [r"\bottomrule", r"\end{tabular}"]
+    if c["wide"]:
+        body = [r"\resizebox{\textwidth}{!}{%"] + body[:-1] + [body[-1] + "}"]
+    lines = [r"\begin{table}[htbp]", r"\centering",
+             r"\caption[" + c["short"] + "]{" + c["caption"] + "}", r"\label{" + c["label"] + "}",
+             r"\small", r"\rowcolors{2}{white}{tablerowalt}"] + body + [r"\end{table}", ""]
     Path(out).write_text("\n".join(lines), encoding="utf-8")
 
 

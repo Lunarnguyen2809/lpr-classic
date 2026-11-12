@@ -1,6 +1,12 @@
+\begin{table}[htbp]
+\centering
+\caption[E2: bộ lọc nhiễu, \code{localize\_edge}]{E2: bộ lọc nhiễu, \code{localize\_edge}, dòng ALL. Đậm là bộ lọc được chọn trên tune. Nguồn: \code{e2\_filters.csv}.}
+\label{tab:e2}
+\small
+\rowcolors{2}{white}{tablerowalt}
 \begin{tabular}{llrrrrrr}
 \toprule
-Tập & Bộ lọc & $n$ & P & R & F1 & R@5 & ms/ảnh \\
+\rowcolor{tableheader} \tblhd{Tập} & \tblhd{Bộ lọc} & \tblhd{$n$} & \tblhd{P} & \tblhd{R} & \tblhd{F1} & \tblhd{R@5} & \tblhd{ms/ảnh} \\
 \midrule
 tune & \textbf{bilateral} & 198 & 0.775 & 0.747 & 0.761 & 0.828 & 132.5 \\
 tune & gaussian & 198 & 0.630 & 0.601 & 0.615 & 0.682 & 95.0 \\
@@ -13,3 +19,4 @@ test & median & 462 & 0.616 & 0.584 & 0.600 & 0.699 & 93.2 \\
 test & none & 462 & 0.610 & 0.576 & 0.592 & 0.645 & 84.7 \\
 \bottomrule
 \end{tabular}
+\end{table}
