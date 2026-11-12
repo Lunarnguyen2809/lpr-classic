@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering
+\caption[Crop \code{gt} so với bước lỗi trên crop \code{pred}]{Trạng thái trên crop \code{gt} (hàng) so với bước lỗi trên crop \code{pred} (cột), số ảnh test, cộng các nhóm base, blur, challenge, db, tilt. Nguồn: \code{triage\_gt\_vs\_pred.csv}.}
+\label{tab:cross}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{crop gt $\backslash$ bước pred} & \tblhd{loc\_\allowbreak no\_\allowbreak candidate} & \tblhd{loc\_\allowbreak rank} & \tblhd{rectify} & \tblhd{segment\_\allowbreak count} & \tblhd{segment\_\allowbreak position} & \tblhd{ok} \\
+\hline
+ok (260) & 34 & 8 & 32 & 64 & 56 & 66 \\
+segment\_count (182) & 57 & 8 & 21 & 57 & 15 & 24 \\
+segment\_position (20) & 5 & 3 & 6 & 2 & 4 & 0 \\
+\hline
+\end{tabularx}
+\end{table}

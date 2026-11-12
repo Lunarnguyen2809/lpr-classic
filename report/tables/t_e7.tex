@@ -1,0 +1,24 @@
+\begin{table}[htbp]
+\centering
+\caption[E7: thời gian từng bước (test, ALL)]{E7: thời gian từng bước, tập test, dòng ALL (ms/ảnh). Nguồn: \code{e7\_runtime.csv}. Bước ``Sobel, morph, lọc, NMS'' được ước lượng bằng hiệu thời gian \code{localize\_edge} trừ thời gian tiền xử lý đo riêng. 30 ảnh không có ứng viên nên các bước sau định vị chỉ có $n=432$.}
+\label{tab:e7}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Bước} & \tblhd{$n$} & \tblhd{tb (ms)} & \tblhd{p95 (ms)} \\
+\hline
+tiền xử lý (resize, xám, CLAHE, lọc) & 462 & 69.79 & 134.32 \\
+Sobel, morph đa tỉ lệ, lọc, NMS (ước lượng) & 462 & 63.50 & 149.30 \\
+HOG + SVM & 462 & 4.77 & 10.77 \\
+ước lượng quad & 432 & 0.97 & 2.20 \\
+warp 220$\times$70 & 432 & 0.34 & 0.59 \\
+nhị phân hóa (B) & 432 & 0.10 & 0.18 \\
+tách ký tự (B) & 432 & 0.43 & 0.76 \\
+\hline
+\textbf{tổng (không SVM)} & 462 & 135.01 & 247.69 \\
+\textbf{tổng} & 462 & 139.79 & 262.16 \\
+\hline
+\end{tabularx}
+\end{table}

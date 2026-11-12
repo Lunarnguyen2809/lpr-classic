@@ -1,0 +1,57 @@
+\chapter{GIỚI THIỆU BÀI TOÁN, DỮ LIỆU VÀ ĐỘ ĐO}
+\label{chap:intro}
+
+\section{Bài toán}
+\label{sec:problem}
+
+Bài toán được đặt trong ngữ cảnh một hệ thống kiểm soát xe ra vào bãi gửi xe. Camera cố định chụp xe; hệ thống cần định vị biển số, nắn biển về hình chữ nhật chuẩn, rồi tách từng ký tự để chuẩn bị cho bước nhận dạng ký tự (OCR) về sau. Với mỗi ảnh đầu vào, đầu ra giữa kỳ gồm hộp biển số, ảnh biển đã nắn và danh sách hộp ký tự.
+
+Dự án chỉ dùng xử lý ảnh cổ điển, không dùng học sâu. Các nội dung nằm ngoài phạm vi giữa kỳ là nhận dạng ký tự, mô hình học sâu, giao diện web, và biển hai dòng trong đánh giá định lượng. Pipeline gồm các bước: tiền xử lý, định vị biển, nắn phối cảnh, nhị phân hóa và tách ký tự. Nhóm có hai thành viên: thành viên A (Châu Anh) phụ trách ba bước đầu và phần đánh giá, thành viên B (Bích) phụ trách hệ màu, nhị phân hóa và tách ký tự (xem bảng phân công ở đầu báo cáo).
+
+\section{Dữ liệu}
+\label{sec:data}
+
+Dữ liệu là một tập con của CCPD2019 \cite{ccpd} gồm 660 ảnh có biển xanh Trung Quốc 7 ký tự: nhóm \code{base} 500 ảnh và bốn nhóm khó \code{tilt}, \code{blur}, \code{db} (ngược sáng hoặc chói), \code{challenge}, mỗi nhóm 40 ảnh. Chỉ lấy ảnh có chuỗi biển hợp lệ (đủ 7 ký tự). Mỗi ảnh có đúng một biển. Việc lấy mẫu dùng seed 42.
+
+Ngoài ra có 40 ảnh biển số Việt Nam tự chụp (làm mờ mặt người trước khi đưa vào kho mã), chỉ dùng cho đánh giá định tính (thí nghiệm E8, phần của B). Các ảnh này không dùng để chỉnh ngưỡng, không dùng làm mẫu huấn luyện và không tính vào bảng số liệu, vì phần lớn là biển xe máy hai dòng gần vuông, khác hẳn phân bố của CCPD.
+
+\section{Chia tập tune và test}
+\label{sec:split}
+
+Ảnh được chia cố định (seed 42), phân tầng theo nhóm, thành tập \emph{tune} (30\%, 198 ảnh) dùng để chọn tham số và huấn luyện, và tập \emph{test} (70\%, 462 ảnh) chỉ dùng để báo cáo (Bảng~\ref{tab:split}).
+
+\begin{table}[htbp]
+\centering
+\caption{Chia tập dữ liệu (số ảnh).}
+\label{tab:split}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{} & \tblhd{base} & \tblhd{tilt} & \tblhd{blur} & \tblhd{db} & \tblhd{challenge} & \tblhd{Tổng} \\
+\hline
+tune & 150 & 12 & 12 & 12 & 12 & 198 \\
+test & 350 & 28 & 28 & 28 & 28 & 462 \\
+\hline
+\end{tabularx}
+\end{table}
+
+\textbf{Kỷ luật tune và test.} Mọi tham số và lựa chọn phương pháp được chọn chỉ dựa trên tập tune: bộ lọc ở E2 và phương pháp ở E3 được chọn theo F1 trên toàn tune, hòa thì theo thứ tự cố định; SVM chỉ huấn luyện trên tune; ngưỡng chia lỗi ở mục triage tính trên tune. Tập test chỉ dùng để báo cáo, không chỉnh lại tham số sau khi xem số test.
+
+\section{Độ đo}
+\label{sec:metrics}
+
+\textbf{Định vị.} Với hai bbox $A$, $B$: $\mathrm{IoU}=|A\cap B|/|A\cup B|$. Mỗi ảnh có một biển và ta lấy ứng viên điểm cao nhất (top-1). Ảnh là TP nếu IoU của top-1 với bbox thật $\geq 0.5$; FP nếu có dự đoán nhưng IoU $<0.5$; FN nếu IoU $<0.5$ hoặc không có ứng viên nào. Khi đó
+\[
+P=\frac{TP}{TP+FP},\qquad R=\frac{TP}{TP+FN},\qquad F_1=\frac{2PR}{P+R}.
+\]
+Vì mỗi ảnh có đúng một biển nên $R$ chính là Recall@1. \textbf{Recall@$k$} là tỉ lệ ảnh có ít nhất một ứng viên trong $k$ ứng viên đầu với IoU $\geq 0.5$; Recall@5 cũng là \code{cand\_recall} (trần mà bước xếp hạng có thể đạt), giúp tách lỗi ``không sinh ra ứng viên đúng'' khỏi lỗi ``xếp hạng sai''.
+
+\textbf{Nắn biển.} Sai số góc (\code{corner\_error}) là khoảng cách Euclid trung bình giữa bốn góc tương ứng của quad dự đoán và quad thật, tính bằng pixel của ảnh gốc, chỉ tính trên ảnh định vị đúng (top-1 có IoU $\geq 0.5$). Với phương án cắt bbox, quad ngầm định là bốn góc của bbox dự đoán.
+
+\textbf{Chất lượng tách ký tự (dùng trong E4).} Theo định nghĩa của dự án (do B phụ trách phần tách): \code{count\_match} là tỉ lệ ảnh có đủ 7 hộp ký tự; \code{pos0} là tỉ lệ biển có ký tự Hán (vị trí 0) trúng khuôn vị trí chuẩn; \code{pos1\textendash 6} là tỉ lệ trung bình các vị trí 1 đến 6 trúng khuôn; \code{all\_correct} là đồng thời đủ 7 hộp và cả 7 vị trí đúng. E4 báo ba nguồn crop: \code{gt} (crop từ bbox hoặc quad thật, tách riêng lỗi của bộ tách), \code{pred} (crop từ top-1 trên mọi ảnh, định vị sai tính là hỏng) và \code{pred\_tp} (chỉ các ảnh top-1 đúng).
+
+\section{Bố cục báo cáo}
+
+Chương~\ref{chap:a-method} trình bày phương pháp của thành viên A, Chương~\ref{chap:a-results} báo cáo kết quả các thí nghiệm E2, E3, E4 và E7, Chương~\ref{chap:a-discussion} phân tích lỗi theo bước pipeline, các hạn chế và hướng cải thiện. Chương~\ref{chap:b} dành cho phần của thành viên B (E1, E5, E6, E8). Chương cuối là kết luận.

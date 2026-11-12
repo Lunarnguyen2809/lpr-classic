@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption[E4 theo nhóm, ảnh top-1 đúng (test)]{E4 theo nhóm, chỉ ảnh top-1 đúng (\code{pred\_tp}), tập test. \code{corner}: sai số góc trung bình (px); \code{count}: \code{count\_match}; \code{all}: \code{all\_correct}. Nguồn: \code{e4\_rectify.csv}.}
+\label{tab:e4sub}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Nhóm} & \tblhd{$n$} & \tblhd{corner bbox} & \tblhd{corner quad} & \tblhd{count bbox} & \tblhd{count quad} & \tblhd{all bbox} & \tblhd{all quad} \\
+\hline
+base & 292 & 23.0 & 15.3 & 0.387 & 0.558 & 0.130 & 0.291 \\
+blur & 16 & 22.8 & 16.0 & 0.125 & 0.063 & 0.125 & 0.000 \\
+challenge & 14 & 23.7 & 19.3 & 0.143 & 0.214 & 0.000 & 0.143 \\
+db & 11 & 34.7 & 24.0 & 0.273 & 0.455 & 0.273 & 0.273 \\
+tilt & 14 & 68.0 & 28.9 & 0.000 & 0.429 & 0.000 & 0.000 \\
+ALL & 347 & 25.2 & 16.3 & 0.346 & 0.513 & 0.124 & 0.259 \\
+\hline
+\end{tabularx}
+\end{table}

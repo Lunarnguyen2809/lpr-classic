@@ -1,0 +1,23 @@
+\begin{table}[htbp]
+\centering
+\caption[E2: bộ lọc nhiễu, \code{localize\_edge}]{E2: bộ lọc nhiễu, \code{localize\_edge}, dòng ALL. Đậm là bộ lọc được chọn trên tune. Nguồn: \code{e2\_filters.csv}.}
+\label{tab:e2}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{llCCCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Tập} & \tblhd{Bộ lọc} & \tblhd{$n$} & \tblhd{P} & \tblhd{R} & \tblhd{F1} & \tblhd{R@5} & \tblhd{ms/ảnh} \\
+\hline
+tune & \textbf{bilateral} & 198 & 0.775 & 0.747 & 0.761 & 0.828 & 132.5 \\
+tune & gaussian & 198 & 0.630 & 0.601 & 0.615 & 0.682 & 95.0 \\
+tune & median & 198 & 0.637 & 0.611 & 0.624 & 0.697 & 107.7 \\
+tune & none & 198 & 0.598 & 0.571 & 0.584 & 0.657 & 97.4 \\
+\hline
+test & \textbf{bilateral} & 462 & 0.729 & 0.682 & 0.705 & 0.792 & 111.1 \\
+test & gaussian & 462 & 0.647 & 0.615 & 0.630 & 0.712 & 82.4 \\
+test & median & 462 & 0.616 & 0.584 & 0.600 & 0.699 & 93.2 \\
+test & none & 462 & 0.610 & 0.576 & 0.592 & 0.645 & 84.7 \\
+\hline
+\end{tabularx}
+\end{table}
