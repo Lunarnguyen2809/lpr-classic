@@ -1,24 +1,238 @@
 \chapter{PHẦN CỦA THÀNH VIÊN B: HỆ MÀU, NHỊ PHÂN HÓA, TÁCH KÝ TỰ}
 \label{chap:b}
 
-\TODO{Chương này là chỗ dành sẵn cho thành viên B (\TenB); nội dung chưa được viết.}
+Chương này trình bày phần việc của thành viên B (\TenB): phân tích hệ màu (E1), nhị phân hóa vùng biển (E5), tách ký tự (E6) và đánh giá định tính trên ảnh biển số Việt Nam (E8). Đầu vào của bước nhị phân hóa là ảnh biển đã nắn về kích thước $220\times 70$ (bằng warp quad, Chương~\ref{chap:a-method}), chuyển sang ảnh xám. Mọi tham số và lựa chọn phương pháp được chọn trên tập tune; tập test chỉ dùng để báo cáo. Cũng như các chương trước, các nhóm khó chỉ có 12 ảnh tune và 28 ảnh test, nên một ảnh đổi kết quả làm tỉ lệ thay đổi $1/28\approx 0.036$.
 
 \section{Phân tích hệ màu (E1)}
 \label{sec:b-color}
 
-\TODO{Phần của Bích}
+\textbf{Câu hỏi.} Kênh màu nào tách vùng biển khỏi phần còn lại của ảnh tốt nhất? Câu trả lời cho biết có nên định vị trên ảnh xám (như \code{localize\_edge} hiện tại) hay dùng thêm thông tin màu.
+
+\textbf{Cách đo.} Với mỗi ảnh tune, tính histogram chuẩn hóa 64 bin của từng kênh trong bbox biển thật ($p$) và trên phần ảnh còn lại ($q$). Độ tách là khoảng cách Bhattacharyya
+\[
+D(p,q)=\sqrt{1-\sum_{i}\sqrt{p_i\,q_i}},
+\]
+bằng 0 khi hai phân bố trùng nhau và bằng 1 khi không chồng lấn. Bảy kênh được so sánh: ảnh xám, ba kênh HSV (H lấy trong $[0,180)$ theo quy ước OpenCV) và ba kênh Lab. Bảng~\ref{tab:e1} cho trung bình $D$ theo nhóm; E1 luôn chạy trên tune vì chỉ là phân tích dữ liệu, không chọn tham số cho pipeline.
+
+\begin{table}[htbp]
+\centering
+\caption[E1: độ tách biển / nền theo kênh màu (tune)]{E1: khoảng cách Bhattacharyya trung bình giữa histogram trong biển và ngoài biển, tune ($n=198$), xếp theo cột ALL. Trong ngoặc là độ lệch chuẩn giữa các ảnh. Nguồn: \code{e1\_color.csv}.}
+\label{tab:e1}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Kênh} & \tblhd{base} & \tblhd{blur} & \tblhd{challenge} & \tblhd{db} & \tblhd{tilt} & \tblhd{ALL} \\
+\hline
+\textbf{b (Lab)} & 0.687 & 0.629 & 0.670 & 0.481 & 0.466 & \textbf{0.657} (0.130) \\
+\textbf{H (HSV)} & 0.681 & 0.621 & 0.697 & 0.500 & 0.462 & \textbf{0.654} (0.141) \\
+S (HSV) & 0.525 & 0.558 & 0.569 & 0.385 & 0.387 & 0.513 (0.135) \\
+V (HSV) & 0.485 & 0.537 & 0.527 & 0.496 & 0.358 & 0.484 (0.121) \\
+a (Lab) & 0.502 & 0.414 & 0.451 & 0.328 & 0.347 & 0.474 (0.129) \\
+xám & 0.474 & 0.495 & 0.552 & 0.451 & 0.370 & 0.472 (0.106) \\
+L (Lab) & 0.465 & 0.491 & 0.548 & 0.468 & 0.357 & 0.465 (0.112) \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/b_e1_hist.png}
+\caption[E1: histogram trung bình trong và ngoài biển]{E1: histogram trung bình trong biển (xanh) và ngoài biển (xám) của bảy kênh, tune $n=198$, xếp theo độ tách giảm dần.}
+\label{fig:e1}
+\end{figure}
+
+\textbf{Nhận xét.}
+\begin{itemize}
+  \item \textbf{b và H tách tốt nhất} ($D\approx 0.65$), S đứng thứ ba (0.51); xám, L, V và a gần như hòa ($\approx 0.47$). Biển CCPD nền xanh dương: trong Lab màu xanh dương nằm ở phía $b<128$, trong HSV dồn vào khoảng $H\approx 100$--$120$ (Hình~\ref{fig:e1}), nên hai kênh này gom gọn vùng biển và lệch khỏi nền. Ảnh xám và L chỉ đo độ sáng, mà nền biển xanh đậm có độ sáng gần với thân xe và mặt đường.
+  \item \textbf{Thứ hạng ổn định theo số bin:} đo lại với 32 và 128 bin, ba hạng đầu không đổi (b $\approx$ H $>$ S); bốn kênh cuối đổi chỗ cho nhau với chênh lệch dưới 0.02, coi như hòa.
+  \item \textbf{Theo nhóm:} \code{db} và \code{tilt} tách kém nhất ở mọi kênh. Ở \code{db} biển tối hoặc chói làm màu mất bão hòa, nên V ($0.496$) gần bằng H ($0.500$); ở \code{tilt} bbox ngang của biển nghiêng ôm cả nền.
+  \item Histogram H ngoài biển có đỉnh lớn ở 0: pixel xám hoặc trắng có $S\approx 0$ nên H không xác định và OpenCV gán 0. Răng cưa đều ở các kênh xám, L, V là do lượng tử hóa khi giải nén JPEG và đổi hệ màu, không làm đổi thứ hạng.
+\end{itemize}
+
+\textbf{Hệ quả và hạn chế.} Pipeline hiện định vị trên ảnh xám, kênh có độ tách gần thấp nhất. Một nguồn ứng viên theo màu (ví dụ tỉ lệ pixel có $H\in[95,135]$ và S đủ lớn) là hướng bổ sung tự nhiên cho khâu sinh ứng viên, đúng chỗ mà 21\% ảnh test không có ứng viên đúng trong top-5 (Chương~\ref{chap:a-discussion}); hướng này chưa được thử. Tuy nhiên kết luận này gắn với biển nền xanh của CCPD: biển Việt Nam nền trắng hoặc vàng sẽ không có lợi thế ở kênh H và b. Ngoài ra ``ngoài biển'' là toàn bộ phần ảnh còn lại, nên $D$ đo biển so với toàn cảnh chứ không phải so với vùng ngay sát biển, và histogram trong biển gồm cả ký tự trắng lẫn viền.
 
 \section{Nhị phân hóa: Otsu và adaptive (E5)}
 \label{sec:b-binarize}
 
-\TODO{Phần của Bích}
+\subsection{Phương pháp}
+
+Hàm \code{binarize\_plate} nhận ảnh biển xám và trả ảnh nhị phân với \emph{ký tự trắng trên nền đen}, theo một trong hai cách.
+
+\textbf{Otsu~\cite{otsu}.} Chọn một ngưỡng toàn cục $t$ cho cả biển, sao cho phương sai giữa hai lớp (pixel $\le t$ và $>t$) lớn nhất:
+\[
+t^{*}=\arg\max_{t}\;\omega_0(t)\,\omega_1(t)\,\big(\mu_0(t)-\mu_1(t)\big)^2,
+\]
+trong đó $\omega_k$ là tỉ lệ pixel và $\mu_k$ là độ sáng trung bình của lớp $k$. Cách này hợp khi histogram của biển có hai đỉnh rõ (nền và chữ) và độ sáng đều trên toàn biển.
+
+\textbf{Adaptive.} Mỗi pixel có ngưỡng riêng $T(x,y)=m_G(x,y)-C$, với $m_G$ là trung bình có trọng số Gauss trong cửa sổ $25\times 25$ quanh pixel và $C=7$ (tham số \code{binarize.adaptive} trong config). Cách này chịu được biển sáng không đều (bóng đổ, chói một bên). Bản cài đặt đầu tiên dùng \code{THRESH\_BINARY} trực tiếp: với biển xanh chữ trắng, vùng nền phẳng thành trắng còn ký tự chỉ còn viền rỗng. Bản sửa dùng Otsu để đoán cực tính (nếu chữ sáng hơn nền thì đảo ảnh xám trước) rồi áp \code{THRESH\_BINARY\_INV}, nên nền phẳng luôn thành đen; một test đơn vị kiểm tra điều này.
+
+Sau đó \code{ensure\_text\_white} đảo ảnh nếu hơn một nửa số pixel là trắng (phòng trường hợp đoán sai cực tính), và \code{clean\_binary} mở hình thái học bằng kernel $2\times 2$ để xóa chấm nhiễu nhỏ.
+
+\subsection{Kết quả}
+
+E5 so sánh hai cách với bộ tách cố định (\code{cca}) trên crop warp quad thật (\code{gt}), để lỗi định vị và nắn không lẫn vào. Các độ đo \code{count\_match}, \code{pos0}, \code{pos1\textendash 6}, \code{all\_correct} định nghĩa ở mục~\ref{sec:metrics}.
+
+\textbf{Trên tune.} Sau các bản sửa ở mục~\ref{sec:b-segment-tune}, hai cách gần như hòa: \code{all\_correct} của Otsu là 0.540, của adaptive là 0.566 (cùng tách bằng \code{cca}). Vì chênh lệch nhỏ, cấu hình mặc định giữ \code{otsu}.
+
+\textbf{Trên test.} Bảng~\ref{tab:e5} cho kết quả.
+
+\begin{table}[htbp]
+\centering
+\caption[E5: Otsu và adaptive (test, crop gt)]{E5: Otsu và adaptive, tập test, crop \code{gt} + quad, tách bằng \code{cca}. Nguồn: \code{e5\_binarize.csv}.}
+\label{tab:e5}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lcCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Nhóm} & \tblhd{$n$} & \tblhd{count Otsu} & \tblhd{count adaptive} & \tblhd{all Otsu} & \tblhd{all adaptive} \\
+\hline
+base & 350 & 0.694 & 0.634 & \textbf{0.666} & 0.611 \\
+blur & 28 & 0.143 & 0.214 & \textbf{0.143} & 0.071 \\
+challenge & 28 & 0.214 & 0.393 & 0.143 & \textbf{0.214} \\
+db & 28 & 0.500 & 0.250 & \textbf{0.393} & 0.250 \\
+tilt & 28 & 0.464 & 0.571 & \textbf{0.286} & 0.214 \\
+\hline
+ALL & 462 & \textbf{0.606} & 0.567 & \textbf{0.563} & 0.509 \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/b_binarize.jpg}
+\caption[Ví dụ Otsu và adaptive]{Ví dụ trên tune: ảnh biển (trái), adaptive (giữa), Otsu (phải); hộp xanh lá là kết quả \code{cca}, vạch đỏ phía trên là khuôn 7 vị trí. Otsu làm dính ký tự Hán với ``A'' và dính ``FF'' ở biển mờ hoặc chói (\code{base\_0023}, \code{base\_0057}); adaptive giữ nét rời nhưng sinh hộp thừa ở mép viền (\code{base\_0011}, \code{base\_0024}). Hình chụp ở giai đoạn tune (code trước Issue \#14), chỉ để minh họa.}
+\label{fig:e5}
+\end{figure}
+
+\textbf{Nhận xét.}
+\begin{itemize}
+  \item Trên test Otsu cao hơn: \code{all\_correct} 0.563 so với 0.509. Tính theo cặp ảnh, Otsu đúng hết mà adaptive sai ở 90 biển, ngược lại 65 biển (sign test hai phía, $p\approx 0.054$): chênh lệch ở ngưỡng có ý nghĩa nhưng không ổn định, vì trên tune adaptive lại nhỉnh hơn. Kết luận thận trọng là hai cách tương đương, Otsu (cấu hình mặc định) không thua.
+  \item Adaptive trúng vị trí nhiều hơn (\code{pos0} 0.859 so với 0.805, \code{pos1\textendash 6} 0.875 so với 0.815) nhưng sai số hộp nhiều hơn. Phân bố số hộp trên crop \code{gt} cho thấy hai kiểu lỗi ngược nhau: với Otsu, 148 biển có $\le 6$ hộp (thiếu, do dính) và 34 biển có $\ge 8$ hộp; với adaptive là 115 và 85. Tức Otsu hay làm \emph{dính} ký tự, adaptive hay sinh hộp \emph{thừa} từ mép viền và vệt nhiễu (Hình~\ref{fig:e5}).
+  \item Theo nhóm: adaptive tốt hơn ở \code{challenge} và \code{blur} (theo \code{count\_match}), nơi độ sáng không đều làm một ngưỡng toàn cục thất bại; Otsu tốt hơn rõ ở \code{db} (0.393 so với 0.250), vì biển tối có tương phản thấp hơn $C=7$ nên adaptive làm vỡ nét chữ. Mỗi nhóm chỉ 28 ảnh nên các chênh lệch này chỉ mang tính gợi ý.
+  \item Cả hai cách đều rất nhanh (dưới 1.1 ms/biển gồm cả tách ký tự), không ảnh hưởng tới thời gian toàn pipeline.
+\end{itemize}
 
 \section{Tách ký tự: CCA và projection (E6)}
 \label{sec:b-segment}
 
-\TODO{Phần của Bích}
+\subsection{Phương pháp}
+
+Cả hai bộ tách nhận ảnh nhị phân (chữ trắng) và trả danh sách hộp ký tự sắp từ trái sang phải. Các ngưỡng hình học tính theo tỉ lệ kích thước biển nên không phụ thuộc độ phân giải; các tham số thí nghiệm (khoảng chiều cao ký tự $[0.4,0.9]$ chiều cao biển, tỉ lệ rộng/cao $[0.10,1.0]$, diện tích tối thiểu 30 px) lấy từ config.
+
+\textbf{CCA (connected component analysis).} Gán nhãn thành phần liên thông 8 hướng, rồi:
+\begin{enumerate}
+  \item bỏ viền và nhiễu: thành phần rộng hơn 30\% biển mà rỗng (tỉ lệ lấp đầy dưới 0.35) là viền biển; thành phần có tâm theo chiều dọc ngoài khoảng $[0.25,0.75]$ chiều cao là ốc vít hoặc mép. Khối rộng nhưng đặc (nhiều ký tự dính nhau) được \emph{giữ lại} để cắt ở bước 4, thay vì bị xóa như viền;
+  \item gộp các mảnh chồng nhau theo chiều ngang (chồng $\ge 50\%$), vì ký tự Hán thường vỡ thành nhiều nét xếp chồng; sau đó mới bỏ mảnh dẹt đứng riêng (cao dưới 20\% biển);
+  \item gộp mảnh hẹp (rộng/cao $<0.15$) với mảnh kề nếu khe đủ nhỏ, để không mất các nét dọc rời của ký tự Hán;
+  \item lọc theo chiều cao, tỉ lệ và diện tích, rồi \code{merge\_split\_boxes}: gọi $w_{\mathrm{med}}$ là trung vị chiều rộng hộp và $g$ là trung vị khe giữa các hộp kề; hai hộp hẹp ($<0.75\,w_{\mathrm{med}}$) gần nhau được gộp nếu hộp gộp không quá $1.4\,w_{\mathrm{med}}$; hộp rộng $w\ge 1.7\,w_{\mathrm{med}}$ được cắt đều thành $\operatorname{round}\big((w+g)/(w_{\mathrm{med}}+g)\big)$ phần (tối đa 3).
+\end{enumerate}
+
+\textbf{Projection.} Sau khi bỏ viền và ốc vít theo cùng luật, \code{split\_lines} chiếu theo hàng để tách dòng (CCPD chỉ có biển một dòng; trường hợp hai dòng được kiểm bằng test giả). Trong mỗi dòng, profile cột là số pixel trắng của từng cột; cột có ít nhất 10\% chiều cao dòng là trắng được coi là cột chữ. Các dải cột chữ cách nhau dưới 2 px được nối, dải hẹp được nối với dải kề (ký tự Hán vỡ), dải dưới 4 px bị bỏ. Dải rộng $\ge 1.7\,w_{\mathrm{med}}$ được cắt tại cột có ít pixel trắng nhất (``thung lũng'') trong khoảng $\pm 0.3\,w_{\mathrm{med}}$ quanh vị trí cắt dự kiến, thay vì cắt đều như CCA. Cuối cùng mỗi hộp được co theo chiều dọc về phần có chữ và lọc như CCA.
+
+\textbf{Độ đo.} Khuôn 7 vị trí chuẩn lấy từ kích thước biển Trung Quốc ($440\times 140$ mm: ký tự rộng 45 mm, cách nhau 12 mm, sau ký tự thứ hai cách 34 mm), quy về ảnh $220\times 70$. Kiểm tra trên 5 biển \code{base} đủ 7 hộp: khoảng cách giữa các ký tự khớp khuôn, cả dãy ký tự thật lệch trái trung bình khoảng 3 px (lớn nhất 5 px), vẫn cho IoU theo trục ngang khoảng 0.77 nên chưa làm trượt vị trí. Một hộp trúng vị trí nếu IoU theo trục ngang với khuôn $\ge 0.5$, \emph{hoặc} hộp hẹp (rộng $\le 0.6\times$ rộng khuôn) có tâm nằm trong khuôn. Luật thứ hai được thêm vì chữ số ``1'' chỉ rộng khoảng 9 px so với khuôn 22.5 px, nên IoU luôn khoảng 0.4 dù hộp nằm đúng giữa khuôn: trước khi sửa, trên 150 biển \code{base} của tune chỉ 3/56 vị trí chứa ``1'' được tính đúng, so với 889/994 ở các ký tự khác.
+
+\subsection{Quá trình tinh chỉnh trên tune}
+\label{sec:b-segment-tune}
+
+Bảng~\ref{tab:segtune} tóm tắt các lần sửa, tất cả đo trên tune ($n=198$), crop \code{gt} + quad. Mỗi bước đều xuất phát từ việc đọc ảnh lỗi chứ không phải quét lưới tham số.
+
+\begin{table}[htbp]
+\centering
+\caption[Tinh chỉnh tách ký tự trên tune]{Tinh chỉnh tách ký tự trên tune ($n=198$, crop \code{gt} + quad), \code{all\_correct}. Nguồn: sổ thí nghiệm, mục Tách ký tự.}
+\label{tab:segtune}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{YCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Phiên bản} & \tblhd{Otsu + CCA} & \tblhd{Otsu + proj.} & \tblhd{adapt. + CCA} & \tblhd{adapt. + proj.} \\
+\hline
+Bản đầu (xóa mọi khối rộng $>30\%$, metric IoU) & 0.338 & -- & -- & -- \\
+Giữ khối đặc rộng để cắt & 0.364 & -- & 0.369 & 0.369 \\
+Luật tâm cho hộp hẹp, tỉ lệ min 0.10 & 0.515 & 0.566 & 0.515 & 0.490 \\
+\textbf{Issue \#14 (chốt)} & 0.540 & \textbf{0.596} & 0.566 & 0.530 \\
+\hline
+\end{tabularx}
+\end{table}
+
+Ba thay đổi của Issue \#14: (i) ngưỡng ``mảnh hẹp'' dùng hằng số riêng 0.15 thay vì dùng chung cận dưới tỉ lệ ký tự (đã hạ xuống 0.10 cho chữ số ``1''), nếu không các mảnh ký tự Hán có tỉ lệ 0.10--0.15 không còn được gộp; (ii) số phần cắt tính có khe $g$ thay vì $\operatorname{round}(w/w_{\mathrm{med}})$; (iii) chỉ bỏ mảnh dẹt sau khi đã gộp mảnh chồng, để nét ngang của ký tự Hán được gộp vào ký tự trước. Không tổ hợp nào giảm \code{all\_correct}; với adaptive + CCA là 7 biển đúng thêm, 1 biển mất. Vì các hằng số này được chọn trên chính tune, số tune hơi lạc quan.
+
+Theo quy tắc chọn trên tune, tổ hợp tốt nhất là \textbf{Otsu + projection} (0.596). Tập test khẳng định lựa chọn này (bên dưới). Tuy vậy, config mặc định vẫn đặt \code{segment.method: cca} và triage ở Chương~\ref{chap:a-discussion} dùng CCA; đổi config là việc của cả nhóm.
+
+\subsection{Kết quả trên test}
+
+Bảng~\ref{tab:e6} cho \code{all\_correct} của hai bộ tách với hai nguồn crop: \code{gt} (quad thật, đo riêng bộ tách) và \code{pred} (quad dự đoán của top-1 \code{edge\_svm} + bilateral trên mọi ảnh, định vị sai tính là hỏng). Nhị phân hóa theo config (Otsu).
+
+\begin{table}[htbp]
+\centering
+\caption[E6: CCA và projection (test)]{E6: \code{all\_correct} của CCA và projection, tập test, nhị phân Otsu, crop quad. Hai dòng cuối là các độ đo khác của dòng ALL. Nguồn: \code{e6\_segmentation.csv}.}
+\label{tab:e6}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lcCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Nhóm} & \tblhd{$n$} & \tblhd{CCA gt} & \tblhd{proj. gt} & \tblhd{CCA pred} & \tblhd{proj. pred} \\
+\hline
+base & 350 & 0.666 & \textbf{0.749} & 0.243 & \textbf{0.277} \\
+blur & 28 & 0.143 & \textbf{0.214} & 0.000 & \textbf{0.071} \\
+challenge & 28 & 0.143 & \textbf{0.214} & \textbf{0.071} & 0.000 \\
+db & 28 & \textbf{0.393} & 0.250 & \textbf{0.107} & 0.071 \\
+tilt & 28 & 0.286 & 0.286 & 0.000 & 0.000 \\
+\hline
+ALL & 462 & 0.563 & \textbf{0.626} & 0.195 & \textbf{0.219} \\
+\hline
+ALL, \code{count\_match} & 462 & 0.606 & 0.680 & 0.400 & 0.422 \\
+ALL, \code{pos1\textendash 6} & 462 & 0.815 & 0.864 & 0.518 & 0.477 \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/b_segment.jpg}
+\caption[Ví dụ CCA và projection]{Ví dụ trên tune: ảnh biển (trái), CCA (giữa), projection (phải), cùng ảnh nhị phân adaptive. CCA cắt đều khối ``06'' dính chấm nhiễu thành 3 hộp (\code{base\_0042}, 9/7); projection không bị vì chấm nhiễu không đủ 10\% chiều cao cột, nhưng hay sinh hộp thừa ở mép trái/phải (\code{base\_0002}, \code{base\_0077}). Hình chụp ở giai đoạn tune (code trước Issue \#14), chỉ để minh họa.}
+\label{fig:e6}
+\end{figure}
+
+\textbf{Nhận xét.}
+\begin{itemize}
+  \item \textbf{Projection tốt hơn CCA trên crop \code{gt}}: 0.626 so với 0.563. Tính theo cặp ảnh, projection đúng hết mà CCA sai ở 47 biển, ngược lại 18 biển (sign test, $p<0.001$). Kết quả cùng chiều với tune (0.596 so với 0.540), nên đây là khác biệt ổn định. Lợi thế đến chủ yếu từ \code{count\_match} (0.680 so với 0.606): cắt tại thung lũng của profile cột chính xác hơn cắt đều, và các vệt nhiễu mảnh không đủ cao để thành cột chữ. Phân bố số hộp xác nhận điều này: số biển có $\le 6$ hộp giảm từ 148 (CCA) xuống 110 (projection), còn số biển có $\ge 8$ hộp gần như không đổi (34 và 38).
+  \item Projection thua khi ký tự có cột giữa thưa: chữ ``H'' chỉ có vạch ngang mảnh ở giữa nên bị cắt thành hai nét đứng hẹp rồi bị loại; phần móc dưới của ``J'' làm hộp lệch. CCA tốt hơn ở \code{db} (0.393 so với 0.250), nơi ảnh nhị phân của biển tối có nhiều vệt dọc nối vào ký tự.
+  \item \textbf{Khoảng cách \code{gt} $\to$ \code{pred} rất lớn} (0.626 $\to$ 0.219 với projection): phần lớn lỗi của toàn pipeline nằm trước bước tách. Ngoài khoảng 25\% ảnh định vị sai, quad dự đoán lệch trung bình 16 px (E4) cũng làm hỏng crop. Triage (mục~\ref{sec:triage}) cho con số tương ứng: trong 123 ảnh lỗi \code{segment\_count}, 64 ảnh tách đúng nếu crop bằng quad thật.
+  \item Lỗi do chính bộ tách (đúng cả khi crop \code{gt}) tập trung ở hai chỗ: ký tự Hán dính với chữ ``A'' (thường ra 6 hộp), và mảnh viền hoặc ốc vít ở mép được giữ lại thành hộp thứ 8. Các nhóm khó gần như không có biển đúng hết ngay cả khi crop \code{gt} (0.143--0.393), do ảnh nhị phân đã hỏng từ trước (mờ thành khối đặc, tối thì vỡ nét).
+  \item Thời gian tách rất nhỏ: khoảng 0.8 ms/biển với CCA và 1.5 ms/biển với projection (gồm cả nhị phân hóa).
+\end{itemize}
+
+\subsection{Đánh giá theo hộp ký tự gán tay (sơ bộ)}
+
+Độ đo theo vị trí khuôn không cho biết hộp có ôm sát ký tự hay không. Để bổ sung, nhóm gán tay hộp ký tự cho 30 biển test cố định (22 biển \code{base} và 2 biển mỗi nhóm khó, chia đôi cho hai thành viên) và tính precision, recall, F1 theo hộp với ngưỡng IoU 0.5, ghép một-một. Tại thời điểm viết mới có 16 biển được gán (12 \code{base}, mỗi nhóm khó 1 biển), nên kết quả dưới đây chỉ là sơ bộ.
+
+Trên 16 biển này (crop \code{gt}, Otsu), CCA đạt $P=0.989$, $R=0.813$, $F_1=0.892$; projection đạt $P=0.959$, $R=0.830$, $F_1=0.890$. Trên 12 biển \code{base}, F1 của cả hai đều trên 0.98; recall thấp hơn ở dòng ALL đến từ các biển khó (biển \code{blur} và \code{challenge} gần như không có hộp nào đúng). Precision rất cao cho thấy khi đã sinh ra hộp thì hộp thường ôm đúng ký tự; lỗi chủ yếu là \emph{thiếu} hộp chứ không phải hộp lệch, khớp với nhận xét ở trên.
 
 \section{Ảnh biển số Việt Nam tự chụp, đánh giá định tính (E8)}
 \label{sec:b-vn}
 
-\TODO{Phần của Bích}
+\textbf{Mục tiêu.} E8 chạy pipeline tốt nhất (định vị \code{edge\_svm} + bilateral, nắn quad, Otsu, projection) trên khoảng 40 ảnh biển số Việt Nam tự chụp (split \code{qual}) và xem kết quả bằng mắt, không tính độ đo, để biết pipeline xây trên CCPD tổng quát hóa tới đâu.
+
+\textbf{Trạng thái.} Tại thời điểm viết, bộ ảnh Việt Nam và nhãn bbox chưa được đưa vào dự án (\code{data/vn\_custom/} còn trống), nên E8 chưa chạy. \TODO{Bổ sung hình minh họa và nhận xét sau khi có ảnh VN.}
+
+\textbf{Dự đoán từ thiết kế.} Dựa trên các phần trên, có thể dự đoán trước một số chỗ pipeline sẽ gặp khó với biển Việt Nam (cần kiểm chứng khi chạy E8):
+\begin{itemize}
+  \item \textbf{Màu nền.} Biển Việt Nam nền trắng hoặc vàng, chữ đen: cực tính ngược với CCPD. Bước nhị phân hóa đã tự đoán cực tính bằng Otsu và \code{ensure\_text\_white} nên vẫn ra chữ trắng; nhưng SVM xếp hạng ứng viên chỉ học trên biển xanh của CCPD, và lợi thế của kênh H, b ở E1 không còn.
+  \item \textbf{Biển hai dòng.} Biển xe máy và nhiều biển ô tô vuông có hai dòng. \code{split\_lines} đã hỗ trợ tách dòng nhưng chỉ được kiểm bằng ảnh giả; nắn về $220\times 70$ sẽ làm méo biển vuông, nên cần tỉ lệ nắn riêng.
+  \item \textbf{Số ký tự và khuôn.} Biển Việt Nam có 7--9 ký tự, có dấu gạch và dấu chấm, và không có ký tự Hán; khuôn 7 vị trí của CCPD không áp dụng được, nên E8 chỉ đánh giá định tính.
+\end{itemize}
+
+\section{Tóm tắt phần B}
+
+\begin{itemize}
+  \item \textbf{E1:} kênh b (Lab) và H (HSV) tách biển CCPD khỏi nền tốt nhất ($D\approx 0.65$), ảnh xám đứng gần cuối ($0.47$); đây là gợi ý cho một nguồn ứng viên theo màu, nhưng chỉ đúng với biển nền xanh.
+  \item \textbf{E5:} Otsu và adaptive tương đương; trên test Otsu nhỉnh hơn (0.563 so với 0.509, $p\approx 0.054$) nhưng trên tune ngược lại. Otsu hay làm dính ký tự, adaptive hay sinh hộp thừa.
+  \item \textbf{E6:} projection tốt hơn CCA một cách ổn định trên cả tune và test (test, crop \code{gt}: 0.626 so với 0.563, $p<0.001$), nhờ cắt tại thung lũng của profile cột. Với crop dự đoán, \code{all\_correct} chỉ còn 0.219: phần lớn lỗi tổng thể nằm ở định vị và nắn.
+  \item Thay đổi có tác dụng lớn nhất trong quá trình làm là sửa độ đo cho chữ số ``1'' (tune: 0.364 $\to$ 0.515); tiếp theo là các sửa của Issue \#14 và cắt tại thung lũng của projection.
+  \item \textbf{Hạn chế:} các hằng số hình học của bộ tách được chọn trên tune; khuôn vị trí lệch khoảng 3 px; đánh giá theo hộp gán tay mới có 16/30 biển; E8 chưa chạy.
+\end{itemize}
