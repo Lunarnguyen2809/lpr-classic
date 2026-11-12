@@ -76,7 +76,7 @@
   \begin{tikzpicture}[remember picture,overlay]
     \fill[accent] (current page.north west) rectangle ([yshift=-4.2cm]current page.north east);
     \node[anchor=north west,xshift=9mm,yshift=-7mm,text=white,align=left] at (current page.north west)
-      {\fontsize{9}{11}\selectfont\bfseries ĐẠI HỌC KHOA HỌC TỰ NHIÊN, ĐHQGHN};
+      {\fontsize{9}{11}\selectfont\bfseries TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN, ĐHQGHN};
     \node[anchor=north east,xshift=-9mm,yshift=-5mm,fill=white,rounded corners=3pt,inner sep=2.5mm] at (current page.north east)
       {\includegraphics[height=2.3cm]{figures/HUS.png}};
     \node[anchor=south west,xshift=9mm,yshift=-4.2cm+4mm,text=white,align=left,text width=0.72\paperwidth] at (current page.north west)
@@ -136,8 +136,8 @@
     \node[boxA] (in) {Ảnh xe (BGR)};
     \node[boxA,right=of in] (pre) {\textbf{Tiền xử lý}\\resize 800, xám,\\CLAHE, lọc nhiễu};
     \node[boxA,right=of pre] (edge) {\textbf{Định vị theo cạnh}\\Sobel-x, Otsu,\\morph đa tỉ lệ,\\lọc, NMS};
-    \node[boxA,right=of edge] (svm) {\textbf{HOG + SVM}\\xếp lại top-5\\(biến thể A+SVM)};
-    \node[boxA,below=of svm] (top1) {Chọn top-1\\(bbox + quad)};
+    \node[boxA,right=of edge] (svm) {\textbf{HOG + SVM}\\xếp lại top-5\\(edge\_svm)};
+    \node[boxA,below=of svm] (top1) {Chọn top-1\\(bbox)};
     \node[boxA,left=of top1] (quad) {\textbf{Ước lượng quad}\\từ mặt nạ xanh\\(HSV)};
     \node[boxA,left=of quad] (warp) {\textbf{Nắn phối cảnh}\\homography về\\ảnh $220\times 70$};
     \node[boxB,left=of warp] (partb) {\textbf{Phần B (Bích)}\\nhị phân hóa,\\tách ký tự};
@@ -155,7 +155,7 @@
   \begin{columns}[T]
     \column{0.42\textwidth}
     \begin{itemize}
-      \item Resize về rộng \acc{800} px (ảnh lớn hơn thì tốt hơn), ảnh xám.
+      \item Resize về rộng \acc{800} px (thử 640/720/800 trên tune, 800 tốt nhất), ảnh xám.
       \item CLAHE (clip 2.0, lưới $8\times8$) cân bằng sáng cục bộ.
       \item So sánh 4 bộ lọc: \code{none}, \code{gaussian}, \code{median}, \code{bilateral}.
       \item Chọn \hl{bilateral} theo F1 trên tune (0.761 so với 0.584--0.624).
@@ -164,7 +164,7 @@
     \column{0.56\textwidth}
     {\small\bfseries Tập test, $n=462$, \code{localize\_edge}}\\[1mm]
     \small
-    \begin{tabularx}{\linewidth}{lCCCC}
+    \setlength{\tabcolsep}{3pt}\begin{tabularx}{\linewidth}{lCCCC}
       \rowcolor{accent}\hd{Bộ lọc} & \hd{F1} & \hd{R@1} & \hd{R@5} & \hd{ms/ảnh}\\
       \rowcolor{accentlight}\textbf{bilateral} & \textbf{0.705} & \textbf{0.682} & \textbf{0.792} & 111.1\\
       gaussian & 0.630 & 0.615 & 0.712 & 82.4\\
@@ -192,7 +192,7 @@
     {\small \textbf{Issue \#10}: nút thắt ở bộ lọc (tăng $k$ lên 10 không đổi). Sửa: hai kernel phụ, \code{area\_ratio} $[0.008,0.16]$, \code{aspect} $[1.5,7]$, chọn trên tune.}
     \column{0.48\textwidth}
     {\small\bfseries Trước và sau, tập test (\code{localize\_edge})}\\[1mm]
-    \begin{tabularx}{\linewidth}{lCC}
+    \setlength{\tabcolsep}{3pt}\begin{tabularx}{\linewidth}{lCC}
       \rowcolor{accent}\hd{ALL ($n=462$)} & \hd{Cũ} & \hd{Chốt}\\
       Recall ứng viên (R@5) & 0.667 & \acc{0.792}\\
       \rowcolor{accentlight}Recall@1 (top-1) & 0.545 & \acc{0.682}\\
@@ -235,13 +235,13 @@
     \column{0.56\textwidth}
     {\small\bfseries Tập test, toàn pipeline}\\[1mm]
     \small
-    \begin{tabularx}{\linewidth}{lCC}
+    \setlength{\tabcolsep}{3pt}\begin{tabularx}{\linewidth}{lCC}
       \rowcolor{accent}\hd{Chỉ số} & \hd{bbox} & \hd{Quad}\\
-      Sai số góc, tb (px) & 25.2 & \acc{16.3}\\
-      \rowcolor{accentlight}Sai số góc, trung vị (px) & 19.4 & \acc{13.8}\\
-      \code{all\_correct}, crop \code{gt} & 0.262 & \acc{0.563}\\
-      \rowcolor{accentlight}\code{all\_correct}, top-1 đúng & 0.124 & \acc{0.259}\\
-      Sai số góc \code{tilt} (px) & 68.0 & \acc{28.9}\\
+      Sai số góc, tb (px), $n{=}347$ & 25.2 & \acc{16.3}\\
+      \rowcolor{accentlight}Sai số góc, trung vị (px), $n{=}347$ & 19.4 & \acc{13.8}\\
+      \code{all\_correct}, crop \code{gt}, $n{=}462$ & 0.262 & \acc{0.563}\\
+      \rowcolor{accentlight}\code{all\_correct}, top-1 đúng, $n{=}347$ & 0.124 & \acc{0.259}\\
+      Sai số góc \code{tilt} (px), $n{=}14$ & 68.0 & \acc{28.9}\\
     \end{tabularx}
     \vspace{2mm}
 
@@ -254,7 +254,7 @@
   \begin{columns}[T]
     \column{0.58\textwidth}
     {\small\bfseries ms/ảnh, trung bình, tập test, một tiến trình}\\[2mm]
-    \begin{tikzpicture}[xshift=9mm,x=0.050cm,y=0.9cm,font=\small]
+    \begin{tikzpicture}[xshift=9mm,x=0.040cm,y=0.9cm,font=\small]
       \barrow{3.0}{Tiền xử lý}{69.79}{69.8}
       \barrow{2.0}{Sobel, morph, lọc, NMS}{63.50}{63.5}
       \barrow{1.0}{HOG + SVM}{4.77}{4.8}
@@ -277,9 +277,10 @@
 \begin{frame}{Triage lỗi: mỗi ảnh test mất ở bước nào?}
   \begin{columns}[T]
     \column{0.62\textwidth}
-    \includegraphics[width=\linewidth]{figures/triage_stages.png}
+    \includegraphics[width=\linewidth,height=0.66\textheight,keepaspectratio]{figures/triage_stages_slide.png}
     \column{0.36\textwidth}
     \footnotesize
+    \setlength{\tabcolsep}{2pt}
     \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}Xrr}
       \rowcolor{accent}\hd{Bước lỗi chính} & \hd{Ảnh} & \hd{\%\,}\\
       \code{loc\_no\_candidate} & 96 & 20.8\\
@@ -342,10 +343,12 @@
   {\Large\bfseries\color{accentdark} Nguyễn Ngọc Bích (24001977)}\\[4mm]
   {\color{muted}Hệ màu, nhị phân hóa, tách ký tự}\\[8mm]
   \begin{tabular}{@{}ll@{}}
+    \acc{E0} & khung \code{run\_all}\\
     \acc{E1} & phân tích hệ màu\\
     \acc{E5} & nhị phân hóa: Otsu và adaptive\\
     \acc{E6} & tách ký tự: CCA và projection\\
     \acc{E8} & ảnh biển số Việt Nam tự chụp, đánh giá định tính\\
+    \acc{Công cụ} & gán nhãn ký tự (\code{label\_chars})\\
   \end{tabular}
   \vfill
   {\footnotesize\color{muted}Nội dung và số liệu do Bích trình bày.}
