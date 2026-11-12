@@ -2,19 +2,20 @@
 \centering
 \caption[Số ảnh test theo bước lỗi chính và nhóm]{Số ảnh test theo bước lỗi chính và nhóm (trong ngoặc là số ảnh của nhóm); cột cuối là phần trăm trên toàn test ($n=462$). Nguồn: \code{triage\_stage\_counts.csv}.}
 \label{tab:triage}
-\small
+\footnotesize
+\setlength{\tabcolsep}{3pt}
 \rowcolors{2}{white}{tablerowalt}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{lrrrrrrr}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCCCCC}
+\hline
 \rowcolor{tableheader} \tblhd{Bước} & \tblhd{base (350)} & \tblhd{blur (28)} & \tblhd{challenge (28)} & \tblhd{db (28)} & \tblhd{tilt (28)} & \tblhd{ALL (462)} & \tblhd{\% ALL} \\
-\midrule
+\hline
 loc\_no\_candidate & 44 & 10 & 14 & 16 & 12 & 96 & 20.8 \\
 loc\_rank & 14 & 2 & 0 & 1 & 2 & 19 & 4.1 \\
 rectify & 40 & 4 & 4 & 2 & 9 & 59 & 12.8 \\
 segment\_count & 100 & 11 & 7 & 4 & 1 & 123 & 26.6 \\
 segment\_position & 67 & 1 & 1 & 2 & 4 & 75 & 16.2 \\
 ok & 85 & 0 & 2 & 3 & 0 & 90 & 19.5 \\
-\bottomrule
-\end{tabular}}
+\hline
+\end{tabularx}
 \end{table}

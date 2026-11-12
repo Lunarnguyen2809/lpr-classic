@@ -91,22 +91,25 @@ def prf(r):
 
 
 def tab(cols, header, rows, out):
-    """Ghi một môi trường table (caption trên, tiêu đề xanh chữ trắng đậm, dòng xen kẽ)."""
+    """Ghi một môi trường table (caption trên, tiêu đề xanh chữ trắng đậm, dòng xen kẽ).
+
+    Bảng dàn đủ \textwidth bằng tabularx: cột 'l' giữ nguyên, cột 'r' thành cột X căn giữa (C)."""
     key = Path(out).stem
     c = CAPS[key]
-    body = [r"\begin{tabular}{" + cols + "}", r"\toprule",
-            r"\rowcolor{tableheader} " + " & ".join(r"\tblhd{" + h + "}" for h in header) + r" \\", r"\midrule"]
+    xcols = "".join("l" if ch == "l" else "C" for ch in cols)
+    hd = [h.replace("\\_", "\\_\\allowbreak ") for h in header]
+    body = [r"\begin{tabularx}{\textwidth}{" + xcols + "}", r"\hline",
+            r"\rowcolor{tableheader} " + " & ".join(r"\tblhd{" + h + "}" for h in hd) + r" \\", r"\hline"]
     for r in rows:
         if r == "MID":
-            body.append(r"\midrule")
+            body.append(r"\hline")
         else:
             body.append(" & ".join(r) + r" \\")
-    body += [r"\bottomrule", r"\end{tabular}"]
-    if c["wide"]:
-        body = [r"\resizebox{\textwidth}{!}{%"] + body[:-1] + [body[-1] + "}"]
+    body += [r"\hline", r"\end{tabularx}"]
+    size = [r"\footnotesize", r"\setlength{\tabcolsep}{3pt}"] if c["wide"] else [r"\small"]
     lines = [r"\begin{table}[htbp]", r"\centering",
-             r"\caption[" + c["short"] + "]{" + c["caption"] + "}", r"\label{" + c["label"] + "}",
-             r"\small", r"\rowcolors{2}{white}{tablerowalt}"] + body + [r"\end{table}", ""]
+             r"\caption[" + c["short"] + "]{" + c["caption"] + "}", r"\label{" + c["label"] + "}"] + size + [
+             r"\rowcolors{2}{white}{tablerowalt}", r"\arrayrulecolor{tableheader}"] + body + [r"\end{table}", ""]
     Path(out).write_text("\n".join(lines), encoding="utf-8")
 
 

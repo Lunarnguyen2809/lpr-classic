@@ -70,10 +70,11 @@ Mọi tham số của bước định vị phía sau (kernel hình thái, ngư�
 \label{tab:edgeparams}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{ll}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lY}
+\hline
 \rowcolor{tableheader} \tblhd{Tham số} & \tblhd{Giá trị} \\
-\midrule
+\hline
 Sobel & theo $x$, kernel 3 \\
 close chính / phụ (rộng $\times$ cao) & $21\times 5$ / $13\times 3$, $33\times 7$ \\
 open & $3\times 3$ \\
@@ -84,8 +85,8 @@ NMS IoU (bbox) & 0.5 \\
 \code{edge\_density} tối thiểu & 0.12 \\
 Góc nghiêng tối đa & $30^\circ$ \\
 Số ứng viên giữ lại $k$ & 5 \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 Thuật toán~\ref{alg:edge} tóm tắt toàn bộ bước định vị theo cạnh.

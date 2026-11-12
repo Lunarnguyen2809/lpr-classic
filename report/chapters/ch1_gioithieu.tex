@@ -26,14 +26,15 @@ Ngoài ra có 40 ảnh biển số Việt Nam tự chụp (làm mờ mặt ngư�
 \label{tab:split}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{lrrrrrr}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCCCC}
+\hline
 \rowcolor{tableheader} \tblhd{} & \tblhd{base} & \tblhd{tilt} & \tblhd{blur} & \tblhd{db} & \tblhd{challenge} & \tblhd{Tổng} \\
-\midrule
+\hline
 tune & 150 & 12 & 12 & 12 & 12 & 198 \\
 test & 350 & 28 & 28 & 28 & 28 & 462 \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 \textbf{Kỷ luật tune và test.} Mọi tham số và lựa chọn phương pháp được chọn chỉ dựa trên tập tune: bộ lọc ở E2 và phương pháp ở E3 được chọn theo F1 trên toàn tune, hòa thì theo thứ tự cố định; SVM chỉ huấn luyện trên tune; ngưỡng chia lỗi ở mục triage tính trên tune. Tập test chỉ dùng để báo cáo, không chỉnh lại tham số sau khi xem số test.

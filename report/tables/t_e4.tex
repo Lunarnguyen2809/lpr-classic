@@ -2,21 +2,22 @@
 \centering
 \caption[E4: cắt bbox so với warp quad (test, ALL)]{E4: cắt bbox so với warp quad, tập test, dòng ALL. Sai số góc tính theo pixel ảnh gốc trên 347 ảnh top-1 đúng. Nguồn: \code{e4\_rectify.csv}.}
 \label{tab:e4}
-\small
+\footnotesize
+\setlength{\tabcolsep}{3pt}
 \rowcolors{2}{white}{tablerowalt}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{llrrrrrr}
-\toprule
-\rowcolor{tableheader} \tblhd{Nguồn crop} & \tblhd{Crop} & \tblhd{$n$} & \tblhd{corner (tb / trung vị)} & \tblhd{count\_match} & \tblhd{pos0} & \tblhd{pos1--6} & \tblhd{all\_correct} \\
-\midrule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{llCCCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Nguồn crop} & \tblhd{Crop} & \tblhd{$n$} & \tblhd{corner (tb / trung vị)} & \tblhd{count\_\allowbreak match} & \tblhd{pos0} & \tblhd{pos1--6} & \tblhd{all\_\allowbreak correct} \\
+\hline
 gt & bbox & 462 & -- & 0.452 & 0.571 & 0.597 & 0.262 \\
 gt & quad & 462 & -- & 0.606 & 0.805 & 0.815 & 0.563 \\
-\midrule
+\hline
 pred & bbox & 462 & 25.2 / 19.4 & 0.262 & 0.266 & 0.391 & 0.093 \\
 pred & quad & 462 & 16.3 / 13.8 & 0.400 & 0.496 & 0.518 & 0.195 \\
-\midrule
+\hline
 pred\_tp & bbox & 347 & 25.2 / 19.4 & 0.346 & 0.329 & 0.498 & 0.124 \\
 pred\_tp & quad & 347 & 16.3 / 13.8 & 0.513 & 0.625 & 0.641 & 0.259 \\
-\bottomrule
-\end{tabular}}
+\hline
+\end{tabularx}
 \end{table}

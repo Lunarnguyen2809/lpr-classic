@@ -85,6 +85,11 @@
 
 % Định nghĩa lại cột căn trái cố định độ rộng cho mảng
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+% Cột X (tabularx) căn giữa / căn trái cho bảng dữ liệu dàn đủ bề rộng chữ
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+% Độ giãn dòng mặc định của bảng; các bảng đặc biệt (trang bìa, phân công, ký tên) tự đặt trong nhóm riêng
+\renewcommand{\arraystretch}{1.25}
 % Ô tiêu đề bảng: nền xanh, chữ trắng đậm
 \newcommand{\tblhd}[1]{\cellcolor{tableheader}\textcolor{white}{\bfseries #1}}
 
@@ -275,6 +280,7 @@
     \textbf{\MonHoc}\\[0.2cm]
     \textbf{\HocKy}\\[1.5cm]
 
+    \renewcommand{\arraystretch}{1}
     \begin{tabular}{l l}
         \textbf{Giảng viên:} & \textbf{\GiangVien} \\
                             [0.8cm]
@@ -329,12 +335,14 @@
 \vspace{1.5cm} % Khoảng cách từ tiêu đề xuống bảng
 
 \noindent
+{% nhóm riêng để arraystretch không rò sang các bảng sau
 \renewcommand{\arraystretch}{3.5} % Tăng độ giãn dòng để có không gian ký tên
 \begin{tabular}{@{}p{8cm} l@{}}
     \textbf{Họ và tên} & \textbf{Chữ ký} \\
     \TenA & \rule{6cm}{0.5pt} \\
     \TenB & \rule{6cm}{0.5pt}
-\end{tabular}
+\end{tabular}%
+}
 
 \newpage
 

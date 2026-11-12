@@ -12,18 +12,19 @@
 \label{tab:stagedef}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{lp{0.68\textwidth}}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lY}
+\hline
 \rowcolor{tableheader} \tblhd{Bước} & \tblhd{Điều kiện} \\
-\midrule
+\hline
 \code{loc\_no\_candidate} & không ứng viên nào trong top-5 có IoU $\ge 0.5$ với bbox thật \\
 \code{loc\_rank} & có ứng viên đúng trong top-5 nhưng không phải top-1 \\
 \code{rectify} & top-1 đúng, không \code{all\_correct}, và sai số góc quad lớn hơn ngưỡng \\
 \code{segment\_count} & top-1 đúng, nắn ổn, nhưng số hộp ký tự khác 7 \\
 \code{segment\_position} & đủ 7 hộp nhưng có vị trí không trúng khuôn \\
 \code{ok} & top-1 đúng và \code{all\_correct} \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 Ngưỡng sai số góc là $22.30$ px, bằng phân vị 95 của sai số góc trên tune trong số ảnh top-1 đúng và tách đúng hết ($n=50$ trong 159 ảnh top-1 đúng; trung vị 10.84 px, trong khi nhóm top-1 đúng nhưng tách sai có trung vị 19.84 px). Nói cách khác, đó là mức sai số mà ảnh tách tốt còn chịu được. Ngưỡng tính bằng pixel của ảnh gốc nên phụ thuộc kích thước biển trong ảnh. Ngưỡng chọn trên tune, không dùng số test. Ảnh nắn lệch nhưng vẫn tách đúng thì là \code{ok}; ảnh top-1 sai không bao giờ là \code{ok}.

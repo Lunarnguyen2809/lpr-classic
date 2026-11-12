@@ -16,15 +16,16 @@ Mọi số liệu dưới đây dùng ngưỡng IoU $\ge 0.5$. Tham số và l�
 \label{tab:resize}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{lrrrr}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCC}
+\hline
 \rowcolor{tableheader} \tblhd{Chiều rộng} & \tblhd{P} & \tblhd{R} & \tblhd{F1} & \tblhd{R@5} \\
-\midrule
+\hline
 640 & 0.639 & 0.591 & 0.614 & 0.727 \\
 720 (không đổi tỉ lệ) & 0.640 & 0.601 & 0.620 & 0.758 \\
 \textbf{800 (chọn, phóng to)} & 0.647 & 0.621 & 0.634 & 0.778 \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 \textbf{Bộ lọc nhiễu.} E2 chạy \code{localize\_edge} với bốn bộ lọc và cấu hình chốt của mục~\ref{sec:tuning}, trên cả tune và test (Bảng~\ref{tab:e2}). Bộ lọc được chọn chỉ theo F1 trên tune.
@@ -44,17 +45,18 @@ Cấu hình ban đầu (kernel close $17\times 3$, \code{fill\_ratio} tối thi�
 \label{tab:sweep}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{lrrrr}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCC}
+\hline
 \rowcolor{tableheader} \tblhd{Cấu hình} & \tblhd{P} & \tblhd{R} & \tblhd{F1} & \tblhd{R@5} \\
-\midrule
+\hline
 Mặc định cũ: close $[17,3]$, fill 0.5, dens 0.15 & 0.570 & 0.348 & 0.433 & 0.384 \\
 fill 0.35, dens 0.10 (close $[17,3]$) & 0.545 & 0.515 & 0.530 & 0.682 \\
 fill 0.35, dens 0.10 + close $[25,5]$ & 0.647 & 0.621 & 0.634 & 0.778 \\
 fill 0.35, dens 0.10 + close $[21,5]$ & 0.672 & 0.641 & 0.656 & 0.783 \\
 \textbf{close $[21,5]$, fill 0.40, dens 0.12 (chốt)} & \textbf{0.703} & \textbf{0.646} & \textbf{0.674} & \textbf{0.768} \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 \textbf{Issue \#10: recall của ứng viên.} Sau đó chúng tôi nhận thấy biển thật thường bị bỏ sót vì vùng biển vỡ mảnh sau bước hình thái học, hoặc bị ứng viên nhỏ (logo, chữ) xếp trên. Tăng $k$ từ 5 lên 10 không đổi Recall, tức nút thắt nằm ở bộ lọc chứ không phải số ứng viên giữ lại. Top-1 sai thường là một vùng rất nhỏ (\code{area\_ratio} khoảng 0.002--0.003) trong khi biển thật có \code{area\_ratio} khoảng 0.015--0.05. Ba thay đổi được chọn trên tune: (i) thêm hai kernel close phụ và gộp bằng NMS, (ii) nâng cận dưới \code{area\_ratio} từ 0.002 lên 0.008 và cận trên từ 0.10 lên 0.16 theo phân bố bbox thật, (iii) nới \code{aspect} từ $[2,6]$ lên $[1.5,7]$ vì quad của vùng cạnh nghiêng hoặc dính viền dài/ngắn hơn biển thật. Bảng~\ref{tab:i10abl} cho thấy phần đóng góp của từng thay đổi trên tune; Bảng~\ref{tab:i10} so sánh trước và sau theo nhóm, đo trên test đúng một lần cho cấu hình chốt.
@@ -65,17 +67,18 @@ fill 0.35, dens 0.10 + close $[21,5]$ & 0.672 & 0.641 & 0.656 & 0.783 \\
 \label{tab:i10abl}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{lrrr}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCC}
+\hline
 \rowcolor{tableheader} \tblhd{Cấu hình} & \tblhd{\code{cand\_recall}} & \tblhd{Recall@1} & \tblhd{P} \\
-\midrule
+\hline
 Cũ (close $[21,5]$, aspect $[2,6]$, area $[0.002,0.10]$) & 0.768 & 0.646 & 0.703 \\
 Chỉ thêm hai kernel close $[13,3]$, $[33,7]$ & 0.828 & 0.652 & 0.665 \\
 Chỉ đổi area thành $[0.008,0.16]$ & 0.753 & 0.712 & 0.829 \\
 Area $[0.008,0.16]$ + hai kernel thêm & 0.818 & 0.747 & 0.787 \\
 \textbf{+ aspect $[1.5,7.0]$ (chốt)} & \textbf{0.828} & \textbf{0.747} & \textbf{0.775} \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 \begin{table}[htbp]
@@ -84,19 +87,20 @@ Area $[0.008,0.16]$ + hai kernel thêm & 0.818 & 0.747 & 0.787 \\
 \label{tab:i10}
 \small
 \rowcolors{2}{white}{tablerowalt}
-\begin{tabular}{lrrrr}
-\toprule
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lCCCC}
+\hline
 \rowcolor{tableheader} \tblhd{Nhóm} & \tblhd{$n$} & \tblhd{\code{cand\_recall}} & \tblhd{Recall@1} & \tblhd{P} \\
-\midrule
+\hline
 base & 350 & $0.729\to 0.874$ & $0.609\to 0.751$ & $0.644\to 0.771$ \\
 blur & 28 & $0.500\to 0.643$ & $0.357\to 0.643$ & $0.400\to 0.750$ \\
 challenge & 28 & $0.571\to 0.500$ & $0.429\to 0.464$ & $0.500\to 0.619$ \\
 db & 28 & $0.464\to 0.429$ & $0.321\to 0.321$ & $0.409\to 0.409$ \\
 tilt & 28 & $0.357\to 0.571$ & $0.286\to 0.429$ & $0.348\to 0.500$ \\
-\midrule
+\hline
 ALL & 462 & $0.667\to 0.792$ & $0.545\to 0.682$ & $0.593\to 0.729$ \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 Trên test, Recall@1 tăng từ 0.545 lên 0.682 và \code{cand\_recall} từ 0.667 lên 0.792, tức cải thiện không chỉ do khớp tune. Phần lớn lợi ích nằm ở nhóm \code{base} (Recall@1 $0.609\to 0.751$). Hai nhóm \code{db} và \code{challenge} gần như không đổi hoặc giảm nhẹ \code{cand\_recall} (với $n=28$ chỉ là 1--2 ảnh). Cái giá là thời gian: số ứng viên trung bình mỗi ảnh gần như không đổi nhưng thời gian tăng khoảng 40--50\% do thêm hai lượt hình thái học và tính đặc trưng (tune $309\to 426$ ms/ảnh, test $269\to 396$ ms/ảnh, đo khi máy đang tải nên chỉ mang tính tương đối). Cận diện tích không phải trần cứng: trên test có 16/462 bbox thật có \code{area\_ratio} dưới 0.008 (nhỏ nhất 0.0032) và 1 bbox lớn hơn 0.16, nhưng bộ lọc xét diện tích \code{minAreaRect} của \emph{ứng viên} chứ không phải của bbox thật, và IoU $\ge 0.5$ cho phép ứng viên lớn hơn bbox thật. Phần triage (mục~\ref{sec:triage}) cho thấy chỉ 12/16 bbox nhỏ bị mất ở bước định vị; 4 ảnh còn lại không mất ở đó. Bbox lớn duy nhất (\code{tilt\_0022}, 0.182) cũng không bị loại mà là lỗi xếp hạng (\code{loc\_rank}).

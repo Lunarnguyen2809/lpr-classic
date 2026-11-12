@@ -20,7 +20,7 @@ files = ([root / "main.tex"] + sorted((root / "chapters").glob("*.tex"))
          + sorted((root / "tables").glob("*.tex")))
 errors = []
 
-TABLE_ENVS = ("tabular", "align", "array")
+TABLE_ENVS = ("tabular", "tabularx", "align", "array")
 FORBIDDEN_PKGS = {"fontspec", "xeCJK", "xecjk", "unicode-math", "polyglossia", "luatexja", "luacode",
                   "xltxtra", "xunicode", "mathspec", "xepersian", "ctex"}
 
