@@ -124,6 +124,7 @@
 
 % ============ 3. E1 ============
 \begin{frame}{E1: kênh màu nào tách biển khỏi nền tốt nhất?}
+  \setbeamerfont{itemize/enumerate body}{size=\small}
   \begin{columns}[T]
     \column{0.36\textwidth}
     \begin{itemize}
@@ -135,29 +136,24 @@
     \end{itemize}
     \column{0.62\textwidth}
     \includegraphics[width=\linewidth]{figures/b_e1_hist.png}\\[-1mm]
-    {\footnotesize\color{muted} Xanh: trong biển, xám: ngoài biển. Thứ hạng 3 kênh đầu không đổi với 32 và 128 bin.}
-    \vspace{2mm}
+    {\footnotesize\color{muted} Xanh: trong biển, xám: ngoài biển. Hạng 3 kênh đầu không đổi với 32, 128 bin.}
+    \vspace{1mm}
 
-    {\small Hệ quả: định vị đang dùng ảnh xám. Nguồn ứng viên theo màu là hướng bổ sung (chưa thử), nhưng \hl{chỉ đúng với biển nền xanh}, không dùng được cho biển VN nền trắng/vàng.}
+    {\small Định vị đang dùng ảnh xám. Ứng viên theo màu là hướng bổ sung (chưa thử), nhưng \hl{chỉ đúng với biển nền xanh}.}
   \end{columns}
 \end{frame}
 
 % ============ 4. Nhị phân hóa: phương pháp ============
 \begin{frame}{Nhị phân hóa: Otsu và adaptive}
+  \setbeamerfont{itemize/enumerate body}{size=\small}
   \begin{columns}[T]
     \column{0.49\textwidth}
     {\bfseries\color{accentdark}Otsu: một ngưỡng cho cả biển}
     \[t^{*}=\arg\max_{t}\;\omega_0\,\omega_1\,(\mu_0-\mu_1)^2\]
-    \begin{itemize}
-      \item Cực đại phương sai giữa hai lớp (nền, chữ).
-      \item Hợp khi biển sáng đều, histogram hai đỉnh.
-    \end{itemize}
-    \vspace{2mm}
-    {\bfseries\color{accentdark}Adaptive: ngưỡng riêng cho từng pixel}
+    {\small Cực đại phương sai giữa hai lớp (nền, chữ); hợp khi biển sáng đều, histogram hai đỉnh.}\\[3mm]
+    {\bfseries\color{accentdark}Adaptive: ngưỡng riêng từng pixel}
     \[T(x,y)=m_G(x,y)-C,\quad 25\times25,\; C=7\]
-    \begin{itemize}
-      \item Chịu được bóng đổ, chói một bên.
-    \end{itemize}
+    {\small $m_G$: trung bình Gauss quanh pixel. Chịu được bóng đổ, chói một bên.}
     \column{0.48\textwidth}
     \begin{block}{Lỗi gặp khi cài adaptive}
       \small Biển xanh chữ trắng: nền phẳng thành trắng, ký tự chỉ còn \hl{viền rỗng}.\\[1mm]
@@ -172,9 +168,10 @@
 
 % ============ 5. E5 kết quả ============
 \begin{frame}{E5: Otsu và adaptive cho kết quả tương đương}
+  \setbeamerfont{itemize/enumerate body}{size=\small}
   \begin{columns}[T]
     \column{0.45\textwidth}
-    {\small\bfseries Test, crop \code{gt}, tách bằng CCA}\\[1mm]
+    {\small\bfseries \code{all\_correct}, test, crop \code{gt}, CCA}\\[1mm]
     \small
     \setlength{\tabcolsep}{3pt}\begin{tabularx}{\linewidth}{lcCC}
       \rowcolor{accent}\hd{Nhóm} & \hd{$n$} & \hd{Otsu} & \hd{Adaptive}\\
@@ -185,18 +182,17 @@
       tilt & 28 & \textbf{0.286} & 0.214\\
       \rowcolor{accentlight}\textbf{ALL} & 462 & \textbf{0.563} & 0.509\\
     \end{tabularx}
-    {\footnotesize\color{muted} Giá trị là \code{all\_correct}.}
-    \vspace{1mm}
     \begin{itemize}
-      \item Theo cặp: 90 biển chỉ Otsu đúng, 65 biển chỉ adaptive đúng, $p\approx0.054$.
-      \item Trên tune thì ngược lại (0.540 so với 0.566) $\Rightarrow$ \hl{coi là hòa}, giữ Otsu.
+      \item Theo cặp: 90 / 65 biển, $p\approx0.054$.
+      \item Tune ngược lại (0.540 / 0.566) $\Rightarrow$ \hl{coi là hòa}, giữ Otsu.
     \end{itemize}
     \column{0.53\textwidth}
-    \includegraphics[width=\linewidth]{figures/b_binarize.jpg}\\[-1mm]
+    \centering\includegraphics[width=\linewidth,height=0.5\textheight,keepaspectratio]{figures/b_binarize.jpg}\\[-1mm]
+    \raggedright
     {\footnotesize\color{muted} Ảnh gốc | adaptive | Otsu. Vạch đỏ: khuôn 7 vị trí.}
     \vspace{1mm}
 
-    {\small Hai kiểu lỗi ngược nhau: \hl{Otsu hay làm dính} ký tự (148 biển $\le6$ hộp), \hl{adaptive hay sinh hộp thừa} ở mép viền (85 biển $\ge8$ hộp).}
+    {\small \hl{Otsu hay làm dính} ký tự (148 biển $\le6$ hộp); \hl{adaptive hay thừa hộp} ở mép (85 biển $\ge8$ hộp).}
   \end{columns}
 \end{frame}
 
@@ -252,6 +248,7 @@
 
 % ============ 8. E6 ============
 \begin{frame}{E6: projection tốt hơn CCA, ổn định trên cả hai tập}
+  \setbeamerfont{itemize/enumerate body}{size=\small}
   \begin{columns}[T]
     \column{0.47\textwidth}
     {\small\bfseries Test, Otsu, \code{all\_correct}}\\[1mm]
@@ -267,8 +264,8 @@
     \end{tabularx}
     \vspace{1mm}
     \begin{itemize}
-      \item Theo cặp: 47 / 18 biển, \hl{$p<0.001$}; tune cùng chiều (0.596 / 0.540).
-      \item Lợi thế từ \code{count\_match} (0.680 / 0.606): thiếu hộp giảm 148 $\to$ 110 biển.
+      \item Theo cặp: 47 / 18 biển, \hl{$p<0.001$}; tune cùng chiều.
+      \item Ít thiếu hộp hơn: 148 $\to$ 110 biển.
     \end{itemize}
     \column{0.51\textwidth}
     \includegraphics[width=\linewidth]{figures/b_segment.jpg}\\[-1mm]
@@ -278,9 +275,10 @@
 
 % ============ 9. gt -> pred ============
 \begin{frame}{Lỗi tổng thể chủ yếu nằm trước bước tách}
+  \setbeamerfont{itemize/enumerate body}{size=\small}
   \begin{columns}[T]
     \column{0.52\textwidth}
-    \begin{tikzpicture}[x=4.8cm,y=0.95cm,font=\small]
+    \begin{tikzpicture}[x=4.8cm,y=0.75cm,font=\small]
       \foreach \y/\lab/\v/\t in {3/{proj., crop \code{gt}}/0.626/0.626, 2/{CCA, crop \code{gt}}/0.563/0.563, 1/{proj., crop \code{pred}}/0.219/0.219, 0/{CCA, crop \code{pred}}/0.195/0.195}{
         \node[anchor=east] at (-0.03,\y) {\lab};
         \fill[accent] (0,\y-0.27) rectangle (\v,\y+0.27);
@@ -296,7 +294,7 @@
       \item Lỗi của chính bộ tách: ký tự Hán \hl{dính chữ ``A''} (6 hộp) và mảnh viền ở mép (8 hộp).
     \end{itemize}
   \end{columns}
-  \vspace{2mm}
+  \vspace{1mm}
   \begin{block}{Đánh giá theo hộp gán tay (30 biển test, 210 hộp)}
     \small CCA: P 0.945, R 0.819, F1 0.878 \quad|\quad projection: P 0.962, R 0.838, \hl{F1 0.896} (base: 0.977). P cao hơn R: hộp sinh ra thường ôm đúng ký tự, lỗi chủ yếu là \emph{thiếu} hộp.
   \end{block}
