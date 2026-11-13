@@ -297,8 +297,8 @@
     \end{itemize}
   \end{columns}
   \vspace{2mm}
-  \begin{block}{Đánh giá theo hộp gán tay (sơ bộ, 16/30 biển)}
-    \small CCA: P 0.989, R 0.813, F1 0.892 \quad|\quad projection: P 0.959, R 0.830, F1 0.890. Precision cao: hộp sinh ra thường ôm đúng ký tự, lỗi chủ yếu là \emph{thiếu} hộp.
+  \begin{block}{Đánh giá theo hộp gán tay (30 biển test, 210 hộp)}
+    \small CCA: P 0.945, R 0.819, F1 0.878 \quad|\quad projection: P 0.962, R 0.838, \hl{F1 0.896} (base: 0.977). P cao hơn R: hộp sinh ra thường ôm đúng ký tự, lỗi chủ yếu là \emph{thiếu} hộp.
   \end{block}
 \end{frame}
 
@@ -321,7 +321,7 @@
     \begin{itemize}
       \item Hằng số hình học chọn trên tune.
       \item Khuôn vị trí lệch trái $\approx$ 3 px.
-      \item Hộp gán tay mới 16/30 biển.
+      \item Hộp gán tay chỉ 30 biển (2 biển mỗi nhóm khó).
     \end{itemize}
     {\bfseries\color{accentdark}Hướng tiếp theo}
     \begin{itemize}
