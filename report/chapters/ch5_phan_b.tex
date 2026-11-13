@@ -207,11 +207,33 @@ ALL, \code{pos1\textendash 6} & 462 & 0.815 & 0.864 & 0.518 & 0.477 \\
   \item Thời gian tách rất nhỏ: khoảng 0.8 ms/biển với CCA và 1.5 ms/biển với projection (gồm cả nhị phân hóa).
 \end{itemize}
 
-\subsection{Đánh giá theo hộp ký tự gán tay (sơ bộ)}
+\subsection{Đánh giá theo hộp ký tự gán tay}
 
-Độ đo theo vị trí khuôn không cho biết hộp có ôm sát ký tự hay không. Để bổ sung, nhóm gán tay hộp ký tự cho 30 biển test cố định (22 biển \code{base} và 2 biển mỗi nhóm khó, chia đôi cho hai thành viên) và tính precision, recall, F1 theo hộp với ngưỡng IoU 0.5, ghép một-một. Tại thời điểm viết mới có 16 biển được gán (12 \code{base}, mỗi nhóm khó 1 biển), nên kết quả dưới đây chỉ là sơ bộ.
+Độ đo theo vị trí khuôn không cho biết hộp có ôm sát ký tự hay không. Để bổ sung, nhóm gán tay hộp ký tự cho 30 biển test cố định (22 biển \code{base} và 2 biển mỗi nhóm khó, chọn bằng seed trong config, chia đôi cho hai thành viên theo cùng một quy ước: mỗi ký tự một hộp ôm sát nét chữ, ký tự Hán là một hộp, không gán dấu chấm, viền, ốc vít). Precision, recall, F1 tính theo hộp với ngưỡng IoU 0.5, ghép một-một, cộng dồn TP/FP/FN trên mọi biển (Bảng~\ref{tab:charprf}).
 
-Trên 16 biển này (crop \code{gt}, Otsu), CCA đạt $P=0.989$, $R=0.813$, $F_1=0.892$; projection đạt $P=0.959$, $R=0.830$, $F_1=0.890$. Trên 12 biển \code{base}, F1 của cả hai đều trên 0.98; recall thấp hơn ở dòng ALL đến từ các biển khó (biển \code{blur} và \code{challenge} gần như không có hộp nào đúng). Precision rất cao cho thấy khi đã sinh ra hộp thì hộp thường ôm đúng ký tự; lỗi chủ yếu là \emph{thiếu} hộp chứ không phải hộp lệch, khớp với nhận xét ở trên.
+\begin{table}[htbp]
+\centering
+\caption[P/R/F1 theo hộp ký tự gán tay (test)]{P/R/F1 theo hộp ký tự gán tay, 30 biển test (210 hộp), crop \code{gt} + quad, nhị phân Otsu. Mỗi nhóm khó chỉ 2 biển (14 hộp). Nguồn: \code{e6\_segmentation.csv}.}
+\label{tab:charprf}
+\small
+\rowcolors{2}{white}{tablerowalt}
+\arrayrulecolor{tableheader}
+\begin{tabularx}{\textwidth}{lcCCCC}
+\hline
+\rowcolor{tableheader} \tblhd{Nhóm} & \tblhd{Số biển} & \tblhd{F1 CCA} & \tblhd{F1 proj.} & \tblhd{R CCA} & \tblhd{R proj.} \\
+\hline
+base & 22 & 0.950 & \textbf{0.977} & 0.935 & \textbf{0.961} \\
+blur & 2 & \textbf{0.211} & 0.200 & 0.143 & 0.143 \\
+challenge & 2 & \textbf{0.421} & 0.316 & \textbf{0.286} & 0.214 \\
+db & 2 & 0.929 & \textbf{0.963} & 0.929 & 0.929 \\
+tilt & 2 & 0.783 & \textbf{0.833} & 0.643 & \textbf{0.714} \\
+\hline
+ALL & 30 & 0.878 & \textbf{0.896} & 0.819 & \textbf{0.838} \\
+\hline
+\end{tabularx}
+\end{table}
+
+Trên cả 30 biển, CCA đạt $P=0.945$, $R=0.819$, $F_1=0.878$; projection đạt $P=0.962$, $R=0.838$, $F_1=0.896$, cùng chiều với \code{all\_correct} ở Bảng~\ref{tab:e6}. Với 22 biển \code{base}, F1 của projection là 0.977. Precision của cả hai cao hơn recall rõ rệt: khi đã sinh ra hộp thì hộp thường ôm đúng ký tự, lỗi chủ yếu là \emph{thiếu} hộp (ký tự dính nhau hoặc bị lọc mất), khớp với nhận xét ở trên. Recall thấp nhất ở \code{blur} và \code{challenge} (0.14--0.29), nơi ảnh nhị phân đã hỏng từ trước. Vì mỗi nhóm khó chỉ có 2 biển, các số theo nhóm khó chỉ để tham khảo.
 
 \section{Ảnh biển số Việt Nam tự chụp, đánh giá định tính (E8)}
 \label{sec:b-vn}
@@ -234,5 +256,5 @@ Trên 16 biển này (crop \code{gt}, Otsu), CCA đạt $P=0.989$, $R=0.813$, $F
   \item \textbf{E5:} Otsu và adaptive tương đương; trên test Otsu nhỉnh hơn (0.563 so với 0.509, $p\approx 0.054$) nhưng trên tune ngược lại. Otsu hay làm dính ký tự, adaptive hay sinh hộp thừa.
   \item \textbf{E6:} projection tốt hơn CCA một cách ổn định trên cả tune và test (test, crop \code{gt}: 0.626 so với 0.563, $p<0.001$), nhờ cắt tại thung lũng của profile cột. Với crop dự đoán, \code{all\_correct} chỉ còn 0.219: phần lớn lỗi tổng thể nằm ở định vị và nắn.
   \item Thay đổi có tác dụng lớn nhất trong quá trình làm là sửa độ đo cho chữ số ``1'' (tune: 0.364 $\to$ 0.515); tiếp theo là các sửa của Issue \#14 và cắt tại thung lũng của projection.
-  \item \textbf{Hạn chế:} các hằng số hình học của bộ tách được chọn trên tune; khuôn vị trí lệch khoảng 3 px; đánh giá theo hộp gán tay mới có 16/30 biển; E8 chưa chạy.
+  \item \textbf{Hạn chế:} các hằng số hình học của bộ tách được chọn trên tune; khuôn vị trí lệch khoảng 3 px; đánh giá theo hộp gán tay chỉ có 30 biển (2 biển mỗi nhóm khó); E8 chưa chạy.
 \end{itemize}
