@@ -102,7 +102,7 @@ ALL & 462 & \textbf{0.606} & 0.567 & \textbf{0.563} & 0.509 \\
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{figures/b_binarize.jpg}
+\includegraphics[width=0.78\textwidth]{figures/b_binarize.jpg}
 \caption[Ví dụ Otsu và adaptive]{Ví dụ trên tune: ảnh biển (trái), adaptive (giữa), Otsu (phải); hộp xanh lá là kết quả \code{cca}, vạch đỏ phía trên là khuôn 7 vị trí. Otsu làm dính ký tự Hán với ``A'' và dính ``FF'' ở biển mờ hoặc chói (\code{base\_0023}, \code{base\_0057}); adaptive giữ nét rời nhưng sinh hộp thừa ở mép viền (\code{base\_0011}, \code{base\_0024}). Hình chụp ở giai đoạn tune (code trước Issue \#14), chỉ để minh họa.}
 \label{fig:e5}
 \end{figure}
@@ -123,12 +123,14 @@ ALL & 462 & \textbf{0.606} & 0.567 & \textbf{0.563} & 0.509 \\
 Cả hai bộ tách nhận ảnh nhị phân (chữ trắng) và trả danh sách hộp ký tự sắp từ trái sang phải. Các ngưỡng hình học tính theo tỉ lệ kích thước biển nên không phụ thuộc độ phân giải; các tham số thí nghiệm (khoảng chiều cao ký tự $[0.4,0.9]$ chiều cao biển, tỉ lệ rộng/cao $[0.10,1.0]$, diện tích tối thiểu 30 px) lấy từ config.
 
 \textbf{CCA (connected component analysis).} Gán nhãn thành phần liên thông 8 hướng, rồi:
+{\sloppy
 \begin{enumerate}
   \item bỏ viền và nhiễu: thành phần rộng hơn 30\% biển mà rỗng (tỉ lệ lấp đầy dưới 0.35) là viền biển; thành phần có tâm theo chiều dọc ngoài khoảng $[0.25,0.75]$ chiều cao là ốc vít hoặc mép. Khối rộng nhưng đặc (nhiều ký tự dính nhau) được \emph{giữ lại} để cắt ở bước 4, thay vì bị xóa như viền;
   \item gộp các mảnh chồng nhau theo chiều ngang (chồng $\ge 50\%$), vì ký tự Hán thường vỡ thành nhiều nét xếp chồng; sau đó mới bỏ mảnh dẹt đứng riêng (cao dưới 20\% biển);
   \item gộp mảnh hẹp (rộng/cao $<0.15$) với mảnh kề nếu khe đủ nhỏ, để không mất các nét dọc rời của ký tự Hán;
   \item lọc theo chiều cao, tỉ lệ và diện tích, rồi \code{merge\_split\_boxes}: gọi $w_{\mathrm{med}}$ là trung vị chiều rộng hộp và $g$ là trung vị khe giữa các hộp kề; hai hộp hẹp ($<0.75\,w_{\mathrm{med}}$) gần nhau được gộp nếu hộp gộp không quá $1.4\,w_{\mathrm{med}}$; hộp rộng $w\ge 1.7\,w_{\mathrm{med}}$ được cắt đều thành $\operatorname{round}\big((w+g)/(w_{\mathrm{med}}+g)\big)$ phần (tối đa 3).
 \end{enumerate}
+\par}
 
 \textbf{Projection.} Sau khi bỏ viền và ốc vít theo cùng luật, \code{split\_lines} chiếu theo hàng để tách dòng (CCPD chỉ có biển một dòng; trường hợp hai dòng được kiểm bằng test giả). Trong mỗi dòng, profile cột là số pixel trắng của từng cột; cột có ít nhất 10\% chiều cao dòng là trắng được coi là cột chữ. Các dải cột chữ cách nhau dưới 2 px được nối, dải hẹp được nối với dải kề (ký tự Hán vỡ), dải dưới 4 px bị bỏ. Dải rộng $\ge 1.7\,w_{\mathrm{med}}$ được cắt tại cột có ít pixel trắng nhất (``thung lũng'') trong khoảng $\pm 0.3\,w_{\mathrm{med}}$ quanh vị trí cắt dự kiến, thay vì cắt đều như CCA. Cuối cùng mỗi hộp được co theo chiều dọc về phần có chữ và lọc như CCA.
 
@@ -193,7 +195,7 @@ ALL, \code{pos1\textendash 6} & 462 & 0.815 & 0.864 & 0.518 & 0.477 \\
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{figures/b_segment.jpg}
+\includegraphics[width=0.78\textwidth]{figures/b_segment.jpg}
 \caption[Ví dụ CCA và projection]{Ví dụ trên tune: ảnh biển (trái), CCA (giữa), projection (phải), cùng ảnh nhị phân adaptive. CCA cắt đều khối ``06'' dính chấm nhiễu thành 3 hộp (\code{base\_0042}, 9/7); projection không bị vì chấm nhiễu không đủ 10\% chiều cao cột, nhưng hay sinh hộp thừa ở mép trái/phải (\code{base\_0002}, \code{base\_0077}). Hình chụp ở giai đoạn tune (code trước Issue \#14), chỉ để minh họa.}
 \label{fig:e6}
 \end{figure}
