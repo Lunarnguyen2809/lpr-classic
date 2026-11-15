@@ -56,7 +56,26 @@ Lấy mẫu seed 42: base 500, mỗi subset khó 40 (tổng 660), chỉ lấy �
 python scripts/make_splits.py --annotations data/annotations.csv --vn data/vn_custom/annotations.csv --out data/splits.csv
 ```
 
-Tune 30% / test 70%, phân tầng theo subset. Ảnh VN tự chụp luôn là `qual`.
+Tune 30% / test 70%, phân tầng theo subset. Ảnh VN luôn là `qual`.
+
+## Ảnh VN (Kaggle công khai + crawl Brave)
+
+~150–200 ảnh biển số VN sau lọc chặt (hiện 187), đa dạng màu biển, loại xe, 1/2 dòng, điều kiện chụp: 75 ảnh `tanhphp/vietnamese-license-plates` (Apache-2.0, chỉ ảnh gốc không `_aug`), 64 ảnh `duydieunguyen/licenseplates` (license không rõ, chỉ dùng nội bộ), 48 ảnh crawl Brave duyệt tay (internal_only). Mọi ảnh là split `qual`, chỉ test định tính. Nguồn, license và thẻ từng ảnh ở `data/vn_custom/sources.csv`.
+
+**Ảnh `data/vn_custom/images/` không nằm trong git** (license: crawl `internal_only`, `duydieunguyen` unknown); repo chỉ giữ metadata. Dựng lại cục bộ: tải 2 dataset Kaggle về `data/raw/vn_kaggle/` (kaggle CLI, cần token), chạy crawl để có `data/vn_custom/candidates/`, rồi chạy `build_vn_set.py` từ `selection.csv` như bên dưới.
+
+```bash
+# (một lần, cần BRAVE_API_KEY) ứng viên crawl
+python scripts/crawl_vn_brave.py --dry-run                 # xem query, không gọi mạng
+python scripts/crawl_vn_brave.py                           # crawl ~400 ứng viên (resume được; --categories để chọn)
+python scripts/crawl_vn_brave.py --contact-sheet           # lưới duyệt ở data/vn_custom/candidates/_sheets/
+# dựng bộ ảnh cuối từ danh sách chọn
+python scripts/build_vn_set.py --selection data/vn_custom/selection.csv [--force]
+python scripts/build_vn_set.py --sheet data/vn_custom/_sheet_final.jpg    # lưới soát bbox (gitignore)
+python scripts/make_splits.py                              # gán split qual
+```
+
+`build_vn_set.py` ghi `data/vn_custom/images/vn_NNNN.jpg`, `sources.csv`, `annotations.csv` (bbox ảnh Kaggle: bbox YOLO hoặc hình chữ nhật bao của polygon, đổi sang pixel) và `todo_cvat.txt` (ảnh crawl chưa có bbox, gán bằng CVAT rồi nối vào `annotations.csv`). Ứng viên crawl ở `data/vn_custom/candidates/` (gitignore).
 
 ## Chạy test
 

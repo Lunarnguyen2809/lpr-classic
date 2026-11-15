@@ -58,7 +58,7 @@ def load_records(cfg: dict, split: Split | None = None,
 
 
 def load_vn_records(cfg: dict) -> list[PlateRecord]:
-    """Đọc ảnh VN tự chụp (data/vn_custom/annotations.csv), split luôn là "qual", quad = None.
+    """Đọc ảnh VN (Kaggle công khai + crawl Brave đã lọc); nhãn ở data/vn_custom/annotations.csv (ảnh crawl chờ gán bbox bằng CVAT), split luôn là "qual", quad = None.
 
     Cột `file` là đường dẫn tương đối so với thư mục chứa annotations.csv nếu không tồn tại từ gốc repo.
     """

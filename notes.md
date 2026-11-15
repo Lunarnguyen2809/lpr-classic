@@ -23,7 +23,7 @@ Nhận xét:
 - **Ổn định theo số bin:** đo lại với 32 và 128 bin, 3 hạng đầu không đổi (b ≈ H > S). Bốn kênh cuối đổi chỗ cho nhau, chênh < 0.02, coi như hòa.
 - **Theo subset:** db và tilt tách kém nhất ở mọi kênh (biển tối hoặc chói, bbox nghiêng ôm cả nền). Trên db, V ≈ H (0.50) vì biển tối làm màu mất bão hòa.
 - **Hình histogram:** H ngoài biển có đỉnh lớn ở 0 (pixel xám/trắng, S ≈ 0 nên H không xác định → 0). Gray / L / V có răng cưa đều giữa các bin kề nhau ở cả hai đường: do lượng tử hóa khi giải nén JPEG và đổi hệ màu, không phải do biển; không đổi thứ hạng ở trên.
-- **Hệ quả cho pipeline:** `localize_edge` hiện dùng gray (Sobel-x trên ảnh xám). Kênh b hoặc H có thể giúp lọc ứng viên theo màu (biển xanh). Nhưng biển VN nền trắng / vàng, nên đây là đặc trưng riêng của CCPD, cần ghi vào phần hạn chế. Đề xuất cho Châu Anh (#10): thử thêm độ đo "tỉ lệ pixel xanh" (H trong [95, 135], S đủ cao) khi chấm điểm ứng viên. `rectify.approxpoly` đang làm việc tương tự.
+- **Hệ quả cho pipeline:** `localize_edge` hiện dùng gray (Sobel-x trên ảnh xám). Kênh b hoặc H có thể giúp lọc ứng viên theo màu (biển xanh). Nhưng biển VN nền trắng / vàng (tập crawl còn có xanh dương của cơ quan nhà nước và đỏ của quân đội), nên đây là đặc trưng riêng của CCPD, cần ghi vào phần hạn chế. Đề xuất cho Châu Anh (#10): thử thêm độ đo "tỉ lệ pixel xanh" (H trong [95, 135], S đủ cao) khi chấm điểm ứng viên. `rectify.approxpoly` đang làm việc tương tự.
 - Hạn chế: "ngoài biển" là toàn ảnh còn lại, nên độ tách phản ánh biển so với toàn cảnh, không phải so với vùng ngay sát biển. Trong bbox có cả ký tự trắng và viền nên histogram trong biển có hai đỉnh.
 
 ## Tiền xử lý
