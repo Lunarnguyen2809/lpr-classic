@@ -99,6 +99,9 @@ PYTHONPATH=src python experiments/run_all.py --exp filters
 PYTHONPATH=src python experiments/run_all.py --exp localization
 PYTHONPATH=src python experiments/run_all.py --exp rectify
 PYTHONPATH=src python experiments/run_all.py --exp runtime
+
+# E8: định tính trên ảnh VN (cần data/vn_custom/images/ cục bộ); ghi results/figures/vn/vn_*.png và tables/e8_vn.csv
+PYTHONPATH=src python experiments/run_all.py --exp vn_qualitative
 ```
 
 Đo recall ứng viên của `localize_edge` theo subset (issue #10, mặc định tune; `--split test` chỉ dùng một lần cho cấu hình đã chốt):

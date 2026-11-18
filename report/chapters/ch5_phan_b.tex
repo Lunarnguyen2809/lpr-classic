@@ -237,19 +237,55 @@ ALL & 30 & 0.878 & \textbf{0.896} & 0.819 & \textbf{0.838} \\
 
 Trên cả 30 biển, CCA đạt $P=0.945$, $R=0.819$, $F_1=0.878$; projection đạt $P=0.962$, $R=0.838$, $F_1=0.896$, cùng chiều với \code{all\_correct} ở Bảng~\ref{tab:e6}. Với 22 biển \code{base}, F1 của projection là 0.977. Precision của cả hai cao hơn recall rõ rệt: khi đã sinh ra hộp thì hộp thường ôm đúng ký tự, lỗi chủ yếu là \emph{thiếu} hộp (ký tự dính nhau hoặc bị lọc mất), khớp với nhận xét ở trên. Recall thấp nhất ở \code{blur} và \code{challenge} (0.14--0.29), nơi ảnh nhị phân đã hỏng từ trước. Vì mỗi nhóm khó chỉ có 2 biển, các số theo nhóm khó chỉ để tham khảo.
 
-\section{Ảnh biển số Việt Nam tự chụp, đánh giá định tính (E8)}
+\section{Ảnh biển số Việt Nam, đánh giá định tính (E8)}
 \label{sec:b-vn}
 
-\textbf{Mục tiêu.} E8 chạy pipeline tốt nhất (định vị \code{edge\_svm} + bilateral, nắn quad, Otsu, projection) trên khoảng 40 ảnh biển số Việt Nam tự chụp (split \code{qual}) và xem kết quả bằng mắt, không tính độ đo, để biết pipeline xây trên CCPD tổng quát hóa tới đâu.
+\textbf{Mục tiêu.} E8 chạy pipeline tốt nhất (định vị \code{edge\_svm} + bilateral, nắn quad về $220\times 70$, Otsu, projection) trên ảnh biển số Việt Nam (split \code{qual}) và xem kết quả bằng mắt, để biết pipeline xây trên CCPD tổng quát hóa tới đâu. Bộ ảnh gồm 187 ảnh (75 + 64 ảnh Kaggle và 48 ảnh lấy bằng tìm kiếm Brave, xem Chương~\ref{chap:intro}); mới có bbox cho 139 ảnh Kaggle nên E8 chạy trên 139 ảnh này, 48 ảnh còn lại chờ gán bbox. Mỗi ảnh chạy hai lần: trên crop quanh ứng viên top-1 của bước định vị (\code{pred}) và trên crop theo bbox thật (\code{gt}). Crop theo bbox là hình chữ nhật chứ không phải nắn quad, nên hai cách crop không hoàn toàn tương đương. Kết quả từng ảnh ghi ở \code{results/tables/e8\_vn.csv}; E8 không có độ đo chính thức. Hai cột ``đạt'' dưới đây chỉ là kiểm tra thô, không phải độ đo: \emph{định vị đạt} khi ứng viên top-1 trùng bbox thật (IoU đủ ngưỡng), \emph{tách đạt} khi bộ tách cho 7--10 hộp và số dòng khớp nhãn.
 
-\textbf{Trạng thái.} Tại thời điểm viết, bộ ảnh Việt Nam và nhãn bbox chưa được đưa vào dự án (\code{data/vn\_custom/} còn trống), nên E8 chưa chạy. \TODO{Bổ sung hình minh họa và nhận xét sau khi có ảnh VN.}
-
-\textbf{Dự đoán từ thiết kế.} Dựa trên các phần trên, có thể dự đoán trước một số chỗ pipeline sẽ gặp khó với biển Việt Nam (cần kiểm chứng khi chạy E8):
+\textbf{Kết quả.} Trên 139 ảnh, định vị đạt 40 ảnh (29\%), tách đạt 33 ảnh trên crop \code{gt} và 22 ảnh trên crop \code{pred}. Số theo nhóm (chỉ để minh họa, nhóm nhỏ và không cân bằng):
 \begin{itemize}
-  \item \textbf{Màu nền.} Biển Việt Nam nền trắng hoặc vàng, chữ đen: cực tính ngược với CCPD. Bước nhị phân hóa đã tự đoán cực tính bằng Otsu và \code{ensure\_text\_white} nên vẫn ra chữ trắng; nhưng SVM xếp hạng ứng viên chỉ học trên biển xanh của CCPD, và lợi thế của kênh H, b ở E1 không còn.
-  \item \textbf{Biển hai dòng.} Biển xe máy và nhiều biển ô tô vuông có hai dòng. \code{split\_lines} đã hỗ trợ tách dòng nhưng chỉ được kiểm bằng ảnh giả; nắn về $220\times 70$ sẽ làm méo biển vuông, nên cần tỉ lệ nắn riêng.
-  \item \textbf{Số ký tự và khuôn.} Biển Việt Nam có 7--9 ký tự, có dấu gạch và dấu chấm, và không có ký tự Hán; khuôn 7 vị trí của CCPD không áp dụng được, nên E8 chỉ đánh giá định tính.
+  \item \textbf{Số dòng.} Biển một dòng ($n=44$): định vị đạt 28 (0.64), tách đạt 30 (0.68) trên crop \code{gt} và 22 (0.50) trên crop \code{pred}. Biển hai dòng ($n=95$): định vị đạt 12 (0.13), tách đạt 3 trên crop \code{gt} và 0 trên crop \code{pred}.
+  \item \textbf{Loại xe.} Ô tô ($n=66$): định vị đạt 34 (0.52). Xe máy ($n=61$): 2 (0.03). Xe tải ($n=12$): 4 (0.33). Cả 61 biển xe máy đều có hai dòng.
+  \item \textbf{Màu biển.} Biển trắng ($n=131$): định vị đạt 40 (0.31); biển vàng ($n=6$): 0; biển xanh và biển đỏ mỗi loại 1 ảnh, đều không định vị đạt. Với $n$ nhỏ như vậy các số này chỉ mang tính giai thoại.
 \end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{figures/vn_success.jpg}
+\caption[E8: biển một dòng định vị đúng]{E8, biển một dòng định vị đúng (hộp xanh lá: bbox thật, đỏ: ứng viên top-1). Mỗi hàng, từ trái sang phải: ảnh với hai hộp, biển sau nắn quad, ảnh nhị phân, crop \code{pred} và crop \code{gt} kèm hộp ký tự. Bốn hàng đầu tách tốt. Ở \code{vn\_0163} crop \code{gt} cho 0 ký tự dù biển rõ; ở \code{vn\_0182} (biển tối) các hộp ký tự lệch dù định vị đúng.}
+\label{fig:e8-ok}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{figures/vn_two_line.jpg}
+\caption[E8: biển hai dòng]{E8, biển hai dòng. Dù ứng viên top-1 đúng (\code{vn\_0072}, \code{vn\_0124}), bộ tách chỉ ra 3 hộp hoặc không ra hộp nào; \code{vn\_0102} không có ứng viên; ở \code{vn\_0149} ứng viên chỉ phủ dòng trên của biển.}
+\label{fig:e8-two}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{figures/vn_loc_fail.jpg}
+\caption[E8: định vị sai]{E8, định vị sai (IoU dưới ngưỡng). Ứng viên top-1 rơi vào mặt đường, đèn xe, chân người, vùng chữ/biển khác trong ảnh đông xe (\code{vn\_0069}); ở \code{vn\_0152} và \code{vn\_0187} hộp chỉ phủ một phần biển.}
+\label{fig:e8-loc}
+\end{figure}
+
+\textbf{Nhận xét.}
+\begin{itemize}
+  \item \textbf{Định vị là chỗ hỏng chính.} Chỉ 40/139 ảnh có ứng viên top-1 đạt. Trong sáu ví dụ ở Hình~\ref{fig:e8-loc}, các hộp sai nằm trên vùng nền nhiều cạnh (mặt đường, đèn, chân, vùng chữ/biển khác trong ảnh đông xe) hoặc chỉ phủ một phần biển, nên nắn quad sau đó cũng cắt thiếu. Biển xe máy hai dòng gần như luôn hỏng ở bước này (2/61), một số ảnh không có ứng viên nào.
+  \item \textbf{Biển ô tô một dòng nền trắng chạy khá tốt} (Hình~\ref{fig:e8-ok}): ký tự được tách thành 7--9 hộp, kể cả dấu chấm và dấu gạch, không cần khuôn 7 vị trí.
+  \item \textbf{Biển hai dòng tách sai ngay cả khi có hộp tốt:} chỉ 3/95 ảnh đạt trên crop \code{gt} (Hình~\ref{fig:e8-two}). Một nguyên nhân hợp lý là biển gần vuông bị nắn thành $220\times 70$ nên méo, và \code{split\_lines} được chỉnh trên CCPD; chúng tôi không có thí nghiệm cô lập (ví dụ nắn theo tỉ lệ riêng) để khẳng định.
+  \item \textbf{Crop theo bbox khác nắn quad:} ở 20 ảnh, crop \code{gt} cho 0 ký tự trong khi crop \code{pred} cho ít nhất một hộp (ví dụ \code{vn\_0163}, \code{vn\_0182} ở Hình~\ref{fig:e8-ok}), nên số ``tách đạt trên \code{gt}'' không phải trần của bộ tách.
+  \item \textbf{Biển màu và ảnh ban đêm.} Biển vàng, xanh, đỏ đều không được định vị đạt, phù hợp với dự đoán rằng SVM chỉ học trên biển xanh của CCPD, nhưng $n$ quá nhỏ để kết luận. Ảnh ban đêm có kết quả lẫn lộn (định vị đạt 17/39 ảnh có thẻ \code{night}, so với 23/100 ảnh còn lại; tách đạt trên crop \code{gt} 9/39 so với 24/100); chúng tôi chưa tìm hiểu nguyên nhân.
+\end{itemize}
+
+\textbf{Đối chiếu với dự đoán từ thiết kế.} Trước khi chạy, các phần trên gợi ý ba chỗ khó; kết quả E8 cho thấy:
+\begin{itemize}
+  \item \textbf{Màu nền.} Dự đoán rằng SVM học trên biển xanh sẽ khó với biển trắng và vàng. Phù hợp một phần: biển trắng ô tô một dòng vẫn định vị được khá nhiều, còn biển vàng (6 ảnh) không ảnh nào đạt. Bước nhị phân hóa tự đoán cực tính nên chữ vẫn ra trắng trên nền đen khi biển được định vị đúng (Hình~\ref{fig:e8-ok}).
+  \item \textbf{Biển hai dòng.} Dự đoán đúng, và nặng hơn dự kiến: \code{split\_lines} (trước đây chỉ kiểm bằng ảnh giả) gần như không cho kết quả đạt trên ảnh thật, và định vị cũng kém hơn nhiều so với biển một dòng.
+  \item \textbf{Số ký tự và khuôn.} Đúng như dự đoán, khuôn 7 vị trí không dùng được; E8 chỉ kiểm bằng mắt và đếm hộp thô, không đo độ chính xác.
+\end{itemize}
+Tóm lại, pipeline xây trên CCPD chạy được với biển ô tô một dòng nền trắng nhưng không dùng trực tiếp được cho biển hai dòng và biển xe máy. Cần định vị riêng cho biển xe máy và nắn theo tỉ lệ hai dòng trước khi đánh giá bước tách. Đây là một lần chạy trên 139 ảnh Kaggle không cân bằng (95 biển hai dòng, 61 biển xe máy), không phải ước lượng cho biển Việt Nam nói chung.
 
 \section{Tóm tắt phần B}
 
@@ -257,6 +293,7 @@ Trên cả 30 biển, CCA đạt $P=0.945$, $R=0.819$, $F_1=0.878$; projection �
   \item \textbf{E1:} kênh b (Lab) và H (HSV) tách biển CCPD khỏi nền tốt nhất ($D\approx 0.65$), ảnh xám đứng gần cuối ($0.47$); đây là gợi ý cho một nguồn ứng viên theo màu, nhưng chỉ đúng với biển nền xanh.
   \item \textbf{E5:} Otsu và adaptive tương đương; trên test Otsu nhỉnh hơn (0.563 so với 0.509, $p\approx 0.054$) nhưng trên tune ngược lại. Otsu hay làm dính ký tự, adaptive hay sinh hộp thừa.
   \item \textbf{E6:} projection tốt hơn CCA một cách ổn định trên cả tune và test (test, crop \code{gt}: 0.626 so với 0.563, $p<0.001$), nhờ cắt tại thung lũng của profile cột. Với crop dự đoán, \code{all\_correct} chỉ còn 0.219: phần lớn lỗi tổng thể nằm ở định vị và nắn.
+  \item \textbf{E8:} trên 139 ảnh biển Việt Nam, định vị đạt 40 ảnh (biển một dòng 28/44, hai dòng 12/95, xe máy 2/61); biển hai dòng gần như không tách được ngay cả với bbox thật (3/95). Pipeline chỉ dùng tốt được với biển ô tô một dòng nền trắng.
   \item Thay đổi có tác dụng lớn nhất trong quá trình làm là sửa độ đo cho chữ số ``1'' (tune: 0.364 $\to$ 0.515); tiếp theo là các sửa của Issue \#14 và cắt tại thung lũng của projection.
-  \item \textbf{Hạn chế:} các hằng số hình học của bộ tách được chọn trên tune; khuôn vị trí lệch khoảng 3 px; đánh giá theo hộp gán tay chỉ có 30 biển (2 biển mỗi nhóm khó); E8 chưa chạy.
+  \item \textbf{Hạn chế:} các hằng số hình học của bộ tách được chọn trên tune; khuôn vị trí lệch khoảng 3 px; đánh giá theo hộp gán tay chỉ có 30 biển (2 biển mỗi nhóm khó); E8 chỉ chạy trên 139 ảnh Kaggle (48 ảnh Brave chưa có bbox), kiểm tra bằng mắt và đếm hộp thô, không có độ đo.
 \end{itemize}

@@ -686,7 +686,7 @@ Chênh lệch giữa hai cột là phần lỗi do định vị gây ra.
 | E5 | Nhị phân | otsu vs adaptive | crop gt, CCA | count_match, pos acc | `tables/e5_binarize.csv` |
 | E6 | Tách ký tự | cca vs projection × crop_source gt/pred | binarize tốt nhất | 9.3 + 9.4 | `tables/e6_segmentation.csv` |
 | E7 | Thời gian | từng bước | – | ms/ảnh (trung bình, p95) | `tables/e7_runtime.csv` |
-| E8 | VN định tính | – | pipeline tốt nhất | ảnh minh họa | `figures/vn/*.png` |
+| E8 | VN định tính (`--exp vn_qualitative`) | – | pipeline tốt nhất (method E3 + denoise E2 chọn trên tune, nắn quad, Otsu, chiếu dọc), chạy cả crop top-1 và crop bbox thật | 6 hình minh họa (thành công, định vị sai, tách sai, biển 2 dòng, biển màu, ban đêm) + bảng từng ảnh `tables/e8_vn.csv` (IoU, loc_ok, số ký tự gt/pred, chỉ để viết nhận xét, không vào bảng chính) | `figures/vn/vn_*.png` |
 
 Mọi bảng đều có thêm dòng chia theo `subset`.
 

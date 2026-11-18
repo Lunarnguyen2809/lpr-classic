@@ -300,32 +300,44 @@
   \end{block}
 \end{frame}
 
-% ============ 10. E8 + hạn chế ============
-\begin{frame}{E8 ảnh biển VN, hạn chế và hướng tiếp theo}
+% ============ 10. E8 ============
+\begin{frame}{E8: biển Việt Nam, kết quả chính}
+  \setbeamerfont{itemize/enumerate body}{size=\small}
   \begin{columns}[T]
-    \column{0.49\textwidth}
-    {\bfseries\color{accentdark}E8: biển số Việt Nam}
+    \column{0.47\textwidth}
     \begin{itemize}
-      \item Chưa chạy: bộ ảnh tự chụp chưa đưa vào dự án.
-      \item Dự đoán khó khăn:
-      \begin{itemize}
-        \item nền trắng/vàng, chữ đen: bước nhị phân tự đoán cực tính, nhưng SVM và E1 gắn với nền xanh;
-        \item biển 2 dòng: \code{split\_lines} mới kiểm bằng ảnh giả;
-        \item 7--9 ký tự, không có chữ Hán: khuôn 7 vị trí không áp dụng.
-      \end{itemize}
+      \item 187 ảnh (Kaggle 75 + 64, Brave 48); chạy trên 139 ảnh Kaggle có bbox, chỉ xem bằng mắt.
+      \item Định vị đạt \hl{40/139}; tách đạt 33 (crop \code{gt}) và 22 (crop \code{pred}).
+      \item Biển 1 dòng ($n=44$): định vị 28, tách (\code{gt}) 30.
+      \item Biển 2 dòng ($n=95$): định vị 12, tách (\code{gt}) \hl{3}.
     \end{itemize}
-    \column{0.49\textwidth}
+    \column{0.51\textwidth}
+    \centering\includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{figures/vn_two_line.jpg}\\[-1mm]
+    {\footnotesize\color{muted} Biển 2 dòng: chỉ \code{vn\_0072}, \code{0124} định vị đúng, vẫn tách 0--3 hộp; 4 ảnh còn lại sai hoặc không có ứng viên.}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{E8: nơi pipeline hỏng, hạn chế, hướng tiếp theo}
+  \setbeamerfont{itemize/enumerate body}{size=\footnotesize}
+  \begin{columns}[T]
+    \column{0.40\textwidth}
+    \centering\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{figures/vn_loc_fail.jpg}\\[-1mm]
+    {\footnotesize\color{muted} Định vị sai: mặt đường, đèn, chân, biển/chữ khác trong ảnh đông xe; có hộp chỉ phủ một phần biển.}
+    \column{0.58\textwidth}
+    {\bfseries\color{accentdark}E8}
+    \begin{itemize}
+      \item Xe máy: định vị 2/61 (tất cả biển 2 dòng). Ô tô 34/66.
+      \item Biển vàng (6 ảnh) không ảnh nào đạt; biển xanh, đỏ chỉ 1 ảnh mỗi loại: chỉ là giai thoại.
+      \item Biển 2 dòng bị nắn $220\times70$ và \code{split\_lines} chỉnh trên CCPD (giả thuyết, chưa tách riêng).
+    \end{itemize}
     {\bfseries\color{accentdark}Hạn chế}
     \begin{itemize}
-      \item Hằng số hình học chọn trên tune.
-      \item Khuôn vị trí lệch trái $\approx$ 3 px.
-      \item Hộp gán tay chỉ 30 biển (2 biển mỗi nhóm khó).
+      \item Hằng số chọn trên tune; khuôn lệch $\approx$ 3 px; hộp gán tay 30 biển.
     \end{itemize}
     {\bfseries\color{accentdark}Hướng tiếp theo}
     \begin{itemize}
-      \item Đổi mặc định sang \hl{projection}.
-      \item Xử lý riêng ký tự Hán dính ``A''.
-      \item Nguồn ứng viên theo màu (từ E1).
+      \item \hl{Projection} làm mặc định; xử lý ký tự Hán dính ``A''; ứng viên theo màu (E1).
+      \item Nắn theo tỉ lệ biển 2 dòng; gán bbox cho 48 ảnh Brave.
     \end{itemize}
   \end{columns}
 \end{frame}
@@ -341,7 +353,7 @@
       \item \hl{Nắn}: quad lệch $\approx$ 16 px làm hỏng crop.
       \item \hl{Tách}: ký tự Hán dính ``A'', mảnh viền ở mép.
     \end{enumerate}
-    \item Mọi lựa chọn làm trên CCPD (nền xanh, 1 dòng, 7 ký tự); khả năng dùng cho biển VN chưa kiểm chứng.
+    \item Mọi lựa chọn làm trên CCPD (nền xanh, 1 dòng, 7 ký tự); trên 139 ảnh biển VN (E8), định vị đạt 40; khá với ô tô 1 dòng, kém với biển 2 dòng và xe máy.
   \end{itemize}
 \end{frame}
 
