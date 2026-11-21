@@ -346,3 +346,81 @@ def test_exp_predict_uses_chosen_method(cfg, tmp_path, monkeypatch, best_method,
     pred_quad = seg[(seg.crop_source == "pred") & (seg.crop_method == "quad")]
     assert len(seg) == 16
     assert pred_quad.n_boxes.gt(0).all() == pred_ok   # crop sai (góc ảnh nền xám) không ra ký tự nào
+
+
+# ---------- E8 (VN định tính) ----------
+
+def _vn_rec(image_id: str, n_lines: int = 1) -> PlateRecord:
+    return PlateRecord(image_id=image_id, path="", source="vn", subset="vn", split="qual", bbox=BOX,
+                       quad=None, text=None, n_lines=n_lines)
+
+
+def test_vn_image_result_loc_ok_and_seg(cfg):
+    img = _image(cfg)
+    ok = run_all.vn_image_result(img, _vn_rec("vn_1"), [_cand(BOX)], cfg)
+    assert ok["loc_ok"] and ok["iou"] == pytest.approx(1.0)
+    assert len(ok["boxes_gt"]) >= 6 and len(ok["boxes_pred"]) >= 6
+    assert ok["rect_pred"].shape == (70, 220, 3)
+    bad = run_all.vn_image_result(img, _vn_rec("vn_2"), [_cand(WRONG)], cfg)
+    assert not bad["loc_ok"] and len(bad["boxes_gt"]) >= 6      # crop gt vẫn tách được dù định vị sai
+    none = run_all.vn_image_result(img, _vn_rec("vn_3"), [], cfg)
+    assert none["top1"] is None and none["rect_pred"] is None and none["boxes_pred"] == []
+    row = run_all.vn_row(_vn_rec("vn_3"), {"plate_colour": "white"}, none)
+    assert row["iou"] == 0.0 and not row["loc_ok"] and row["n_chars_pred"] == 0 and row["score"] is None
+    assert set(run_all.VN_COLS) <= set(row)
+
+
+def test_vn_selections_deterministic_and_grouped():
+    df = pd.DataFrame({
+        "image_id": [f"vn_{i:04d}" for i in range(20)],
+        "plate_colour": ["yellow"] * 3 + ["white"] * 17, "n_lines": [2] * 10 + [1] * 10,
+        "conditions": ["night;far"] * 4 + ["day"] * 16,
+        "loc_ok": [True] * 12 + [False] * 8, "seg_ok_pred": [True] * 6 + [False] * 14})
+    sel = run_all.vn_selections(df)
+    assert sel == run_all.vn_selections(df.sample(frac=1, random_state=1))   # không phụ thuộc thứ tự dòng
+    assert len(sel["success"]) == 6 and set(sel["success"]) <= set(df[df.loc_ok & df.seg_ok_pred].image_id)
+    assert set(sel["loc_fail"]) <= set(df[~df.loc_ok].image_id) and "vn_0019" in sel["loc_fail"]
+    assert set(sel["seg_fail"]) <= set(df[df.loc_ok & ~df.seg_ok_pred].image_id)
+    assert sel["colour"] == ["vn_0000", "vn_0002"]   # quota vàng = 2, chọn đầu và cuối
+    assert all(df.set_index("image_id").loc[i, "n_lines"] == 2 for i in sel["two_line"])
+    assert set(sel["night"]) == {"vn_0000", "vn_0001", "vn_0002", "vn_0003"}
+    assert run_all.pick_spread(["b", "a", "c", "d"], 2) == ["a", "d"]
+
+
+def test_summarize_vn_by_tag():
+    df = pd.DataFrame({"n_lines": [1, 1, 2], "loc_ok": [True, False, True], "seg_ok_gt": [True, True, False],
+                       "seg_ok_pred": [True, False, False], "n_chars_gt": [8, 9, 4], "n_chars_pred": [8, 0, 4]})
+    r = {x["n_lines"]: x for x in run_all.summarize_vn(df, "n_lines")}
+    assert r[1]["n"] == 2 and r[1]["loc_ok"] == 0.5 and r[1]["chars_gt_med"] == 8.5 and r[2]["seg_ok_gt"] == 0.0
+
+
+def test_exp_vn_qualitative_writes_csv_and_figures(cfg, tmp_path, monkeypatch):
+    img = _image(cfg)
+    recs = [_vn_rec("vn_0001"), _vn_rec("vn_0002")]
+    (tmp_path / "sources.csv").write_text(
+        "image_id,plate_colour,vehicle,n_lines,conditions\n"
+        "vn_0001,white,car,1,day\nvn_0002,yellow,truck,1,night\n", encoding="utf-8")
+    chosen = {"method": "edge_svm", "denoise": "bilateral"}
+    monkeypatch.setattr(run_all, "_chosen", lambda c, name, col, runner, a: chosen[col])
+    monkeypatch.setattr(run_all, "_load_svm", lambda c: object())
+    monkeypatch.setattr(run_all, "load_vn_records", lambda c: recs)
+    monkeypatch.setattr(run_all, "read_image", lambda p: img)
+    monkeypatch.setattr(run_all, "localize_edge", lambda im, c: [_cand(BOX)])
+    calls = iter([[_cand(BOX)], [_cand(WRONG)]])       # ảnh 1 định vị đúng, ảnh 2 sai
+    monkeypatch.setattr(run_all, "score_candidates", lambda im, cands, m, c: next(calls))
+    tcfg = {**cfg, "paths": {**cfg["paths"], "results": str(tmp_path), "vn": str(tmp_path / "annotations.csv")}}
+    run_all.exp_vn_qualitative(tcfg, argparse.Namespace(split="test", limit=None, config="config/default.yaml"))
+
+    t = pd.read_csv(tmp_path / "tables" / "e8_vn.csv").set_index("image_id")
+    assert list(t.columns) == run_all.VN_COLS[1:]
+    assert t.loc["vn_0001", "loc_ok"] and not t.loc["vn_0002", "loc_ok"]
+    assert t.loc["vn_0002", "plate_colour"] == "yellow" and t.loc["vn_0001", "n_chars_gt"] >= 6
+    figs = {p.name for p in (tmp_path / "figures" / "vn").glob("*.png")}
+    assert {"vn_success.png", "vn_loc_fail.png", "vn_colour.png", "vn_night.png"} <= figs
+    assert "vn_seg_fail.png" not in figs                # nhóm rỗng thì không ghi hình
+
+
+def test_exp_vn_qualitative_no_images_exits(cfg, monkeypatch):
+    monkeypatch.setattr(run_all, "load_vn_records", lambda c: [])
+    with pytest.raises(SystemExit):
+        run_all.exp_vn_qualitative(cfg, argparse.Namespace(split="test", limit=None, config="x"))

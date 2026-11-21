@@ -13,12 +13,13 @@ import os
 import sys
 from typing import Callable
 
+import cv2
 import numpy as np
 import pandas as pd
 
 from lpr.binarize import binarize_plate, clean_binary, ensure_text_white
 from lpr.config import get, load_config
-from lpr.data.dataset import load_char_labels, load_records
+from lpr.data.dataset import load_char_labels, load_records, load_vn_records
 from lpr.evaluate import count_match, iou, match_detections, position_hits, prf
 from lpr.io_utils import read_image, timer, write_csv
 from lpr.localize.edge import localize_edge
@@ -26,7 +27,8 @@ from lpr.localize.hog_svm import load_model, score_candidates
 from lpr.preprocess import preprocess, to_gray
 from lpr.rectify import corner_error, quad_from_candidate, rectify
 from lpr.segment import segment
-from lpr.types import Candidate, PlateRecord
+from lpr.types import Candidate, CharBox, PlateRecord
+from lpr.visualize import draw_candidates, draw_char_boxes
 
 for _s in (sys.stdout, sys.stderr):  # console Windows mặc định cp1252, không in được tiếng Việt
     if hasattr(_s, "reconfigure"):
@@ -710,9 +712,235 @@ def exp_runtime(cfg: dict, args: argparse.Namespace) -> None:
     print(f"đã ghi {path}")
 
 
+E8_SEGMENTER = "projection"        # pipeline tốt nhất của báo cáo; chiếu dọc tách được biển 2 dòng (CCA coi biển 1 dòng)
+E8_CHARS = (7, 10)                 # số ký tự hợp lý của một biển VN (7 biển cũ, 8-9 biển thường)
+E8_ROWS = 6                        # số ví dụ (hàng) mỗi hình
+E8_CROP_W = 480                    # bề rộng hiển thị ảnh gốc đã cắt quanh biển
+VN_COLS = ["image_id", "plate_colour", "vehicle", "n_lines", "conditions", "score", "iou", "loc_ok",
+           "n_chars_gt", "n_chars_pred", "lines_gt", "lines_pred", "seg_ok_gt", "seg_ok_pred"]
+
+
+def _vn_meta(cfg: dict) -> dict[str, dict]:
+    """Thẻ mô tả từng ảnh VN từ sources.csv (cùng thư mục annotations VN): image_id -> dict. Thiếu file thì {}."""
+    vn = get(cfg, "paths.vn")
+    path = os.path.join(os.path.dirname(vn), "sources.csv") if vn else ""
+    if not path or not os.path.isfile(path):
+        return {}
+    df = pd.read_csv(path, dtype=str).fillna("")
+    return {r["image_id"]: r for r in df.to_dict("records")}
+
+
+def _vn_stage(gray: np.ndarray, cfg: dict) -> tuple[np.ndarray, list[CharBox]]:
+    """Binarize (cfg) + segment (E8_SEGMENTER) một crop xám. Output: (ảnh nhị phân chữ trắng, hộp ký tự)."""
+    bm = cfg["binarize"]["method"]
+    b = clean_binary(ensure_text_white(binarize_plate(gray, bm, cfg["binarize"].get(bm, {}))))
+    return b, segment(b, E8_SEGMENTER, cfg)
+
+
+def _seg_plausible(boxes: list[CharBox], n_lines: int) -> bool:
+    """Số hộp trong E8_CHARS và số dòng tìm được khớp n_lines. Chỉ là kiểm tra thô (VN không có nhãn ký tự)."""
+    return E8_CHARS[0] <= len(boxes) <= E8_CHARS[1] and len({b.line for b in boxes}) == n_lines
+
+
+def vn_image_result(img: np.ndarray, rec: PlateRecord, cands: list[Candidate], cfg: dict) -> dict:
+    """Chạy phần sau định vị của pipeline cho một ảnh VN, trên crop top-1 (pred) và crop bbox thật (gt).
+
+    Pred: quad_from_candidate -> nắn quad -> binarize -> segment. Gt: ảnh VN không có quad nên cắt bbox thật
+    (rectify lùi về bbox) -> binarize -> segment; tách lỗi định vị khỏi lỗi tách ký tự.
+    Output: dict gồm top1, iou, loc_ok và, cho mỗi nguồn p thuộc {pred, gt}, rect_<p> (BGR 220×70, None nếu
+    pred không có ứng viên), bin_<p>, boxes_<p>.
+    """
+    thr = get(cfg, "evaluate.iou_threshold", 0.5)
+    top1 = cands[0] if cands else None
+    v = iou(top1.bbox, rec.bbox) if top1 else 0.0
+    out: dict = {"top1": top1, "iou": v, "loc_ok": top1 is not None and v >= thr}
+    rect_gt = rectify(img, rec.bbox, None, "bbox", cfg)
+    out["rect_gt"] = rect_gt
+    out["bin_gt"], out["boxes_gt"] = _vn_stage(to_gray(rect_gt), cfg)
+    if top1 is None:
+        out.update(rect_pred=None, bin_pred=None, boxes_pred=[])
+    else:
+        quad = quad_from_candidate(img, top1, cfg["rectify"]["quad_method"])
+        rect = rectify(img, top1.bbox, quad, "quad", cfg)
+        out["rect_pred"] = rect
+        out["bin_pred"], out["boxes_pred"] = _vn_stage(to_gray(rect), cfg)
+    return out
+
+
+def vn_row(rec: PlateRecord, meta: dict, res: dict) -> dict:
+    """Một dòng e8_vn.csv của ảnh. seg_ok_* = _seg_plausible trên crop gt / pred."""
+    top1 = res["top1"]
+    return {"image_id": rec.image_id, "plate_colour": meta.get("plate_colour", ""),
+            "vehicle": meta.get("vehicle", ""), "n_lines": rec.n_lines,
+            "conditions": meta.get("conditions", ""),
+            "score": None if top1 is None else round(float(top1.score), 4),
+            "iou": round(res["iou"], 4), "loc_ok": bool(res["loc_ok"]),
+            "n_chars_gt": len(res["boxes_gt"]), "n_chars_pred": len(res["boxes_pred"]),
+            "lines_gt": len({b.line for b in res["boxes_gt"]}),
+            "lines_pred": len({b.line for b in res["boxes_pred"]}),
+            "seg_ok_gt": _seg_plausible(res["boxes_gt"], rec.n_lines),
+            "seg_ok_pred": _seg_plausible(res["boxes_pred"], rec.n_lines)}
+
+
+def summarize_vn(df: pd.DataFrame, by: str) -> list[dict]:
+    """Gom e8_vn theo một cột thẻ: n, tỉ lệ loc_ok, seg_ok_gt, seg_ok_pred, trung vị số ký tự gt / pred.
+
+    Chỉ để viết nhận xét định tính, không vào bảng kết quả chính.
+    """
+    rows = []
+    for key, g in df.groupby(by, sort=True):
+        rows.append({by: key, "n": len(g), "loc_ok": round(float(g["loc_ok"].astype(bool).mean()), 3),
+                     "seg_ok_gt": round(float(g["seg_ok_gt"].astype(bool).mean()), 3),
+                     "seg_ok_pred": round(float(g["seg_ok_pred"].astype(bool).mean()), 3),
+                     "chars_gt_med": float(g["n_chars_gt"].median()),
+                     "chars_pred_med": float(g["n_chars_pred"].median())})
+    return rows
+
+
+def pick_spread(ids: list[str], n: int) -> list[str]:
+    """Chọn tối đa n phần tử cách đều trong ids đã sắp (xác định, không ngẫu nhiên)."""
+    ids = sorted(ids)
+    if len(ids) <= n:
+        return ids
+    return [ids[int(i)] for i in np.linspace(0, len(ids) - 1, n).round()]
+
+
+def vn_selections(df: pd.DataFrame) -> dict[str, list[str]]:
+    """Tên hình -> image_id các ví dụ (tối đa E8_ROWS). Nhóm rỗng thì bỏ.
+
+    success: định vị đúng và tách hợp lý; loc_fail: top-1 IoU < ngưỡng; seg_fail: định vị đúng nhưng tách
+    không hợp lý; two_line: biển 2 dòng (nửa đầu hợp lý, nửa sau không); colour: biển màu (vàng, xanh, đỏ,
+    ngoại giao); night: ảnh thẻ night.
+    """
+    ok, seg = df["loc_ok"].astype(bool), df["seg_ok_pred"].astype(bool)
+    two = df["n_lines"] == 2
+    two_ids = pick_spread(list(df[two & ok & seg]["image_id"]), E8_ROWS // 2)
+    two_ids += pick_spread([i for i in df[two & ~(ok & seg)]["image_id"] if i not in two_ids],
+                           E8_ROWS - len(two_ids))
+    col_ids: list[str] = []
+    for colour, q in (("yellow", 2), ("blue", 1), ("red", 1), ("diplomatic", 2)):
+        col_ids += pick_spread(list(df[df["plate_colour"] == colour]["image_id"]), q)
+    sel = {"success": pick_spread(list(df[ok & seg]["image_id"]), E8_ROWS),
+           "loc_fail": pick_spread(list(df[~ok]["image_id"]), E8_ROWS),
+           "seg_fail": pick_spread(list(df[ok & ~seg]["image_id"]), E8_ROWS),
+           "two_line": sorted(two_ids), "colour": col_ids,
+           "night": pick_spread(list(df[df["conditions"].str.contains("night")]["image_id"]), E8_ROWS)}
+    return {k: v for k, v in sel.items() if v}
+
+
+def _scaled_roi(img: np.ndarray, rec: PlateRecord, top1: Candidate | None):
+    """Cắt ảnh quanh bbox thật (+ top-1) với lề bằng cạnh dài của biển, co về E8_CROP_W.
+
+    Output: (ảnh BGR đã co, bbox gt mới, Candidate top-1 mới hoặc None) trong tọa độ ảnh đã co.
+    """
+    h, w = img.shape[:2]
+    boxes = [rec.bbox] + ([top1.bbox] if top1 else [])
+    m = max(rec.bbox[2] - rec.bbox[0], rec.bbox[3] - rec.bbox[1])
+    x1, y1 = max(0, min(b[0] for b in boxes) - m), max(0, min(b[1] for b in boxes) - m)
+    x2, y2 = min(w, max(b[2] for b in boxes) + m), min(h, max(b[3] for b in boxes) + m)
+    s = E8_CROP_W / (x2 - x1)
+    roi = cv2.resize(img[y1:y2, x1:x2], None, fx=s, fy=s,
+                     interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
+
+    def box(b):
+        return (int((b[0] - x1) * s), int((b[1] - y1) * s), int((b[2] - x1) * s), int((b[3] - y1) * s))
+
+    cand = None
+    if top1 is not None:
+        cand = Candidate(bbox=box(top1.bbox), quad=(top1.quad - [x1, y1]) * s, score=top1.score,
+                         method=top1.method)
+    return roi, box(rec.bbox), cand
+
+
+def save_vn_figure(items: list[tuple[PlateRecord, dict, dict, np.ndarray]], path: str, title: str) -> None:
+    """Lưới hàng = ví dụ, 5 cột: ảnh gốc (GT xanh lá, top-1 đỏ) | nắn quad pred | nhị phân pred |
+    hộp ký tự pred | hộp ký tự trên crop bbox thật (GT). items = (record, dòng csv, kết quả, ảnh gốc)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    n = len(items)
+    fig, axes = plt.subplots(n, 5, figsize=(13, 1.9 * n + 0.6), squeeze=False,
+                             gridspec_kw={"width_ratios": [2.4, 1.3, 1.3, 1.3, 1.3]})
+    for ax in axes.flat:
+        ax.axis("off")
+    for ax_row, (rec, row, res, img) in zip(axes, items):
+        roi, gt, cand = _scaled_roi(img, rec, res["top1"])
+        tag = f"{row['image_id']} · {row['plate_colour']} {row['vehicle']} · {row['n_lines']} dòng"
+        ax_row[0].imshow(cv2.cvtColor(draw_candidates(roi, [cand] if cand else [], gt), cv2.COLOR_BGR2RGB))
+        ax_row[0].set_title(f"{tag}\nIoU={row['iou']:.2f} ({'đúng' if row['loc_ok'] else 'sai'})",
+                            fontsize=7, loc="left")
+        if res["rect_pred"] is None:
+            ax_row[1].text(0.5, 0.5, "không có ứng viên", ha="center", va="center", fontsize=7)
+        else:
+            ax_row[1].imshow(cv2.cvtColor(res["rect_pred"], cv2.COLOR_BGR2RGB))
+            ax_row[2].imshow(res["bin_pred"], cmap="gray", vmin=0, vmax=255)
+            ax_row[3].imshow(cv2.cvtColor(draw_char_boxes(res["rect_pred"], res["boxes_pred"]), cv2.COLOR_BGR2RGB))
+        ax_row[1].set_title("nắn quad", fontsize=7)
+        ax_row[2].set_title("nhị phân", fontsize=7)
+        ax_row[3].set_title(f"pred: {row['n_chars_pred']} ký tự, {row['lines_pred']} dòng", fontsize=7)
+        ax_row[4].imshow(cv2.cvtColor(draw_char_boxes(res["rect_gt"], res["boxes_gt"]), cv2.COLOR_BGR2RGB))
+        ax_row[4].set_title(f"crop GT: {row['n_chars_gt']} ký tự, {row['lines_gt']} dòng", fontsize=7)
+    fig.suptitle(title, fontsize=9)
+    fig.tight_layout()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path, dpi=90)
+    plt.close(fig)
+
+
 def exp_vn_qualitative(cfg: dict, args: argparse.Namespace) -> None:
-    """E8: chạy pipeline tốt nhất trên ảnh VN (split qual), lưu ảnh minh họa vào figures/vn/."""
-    raise NotImplementedError("TODO(B): exp_vn_qualitative")
+    """E8: chạy pipeline tốt nhất trên ảnh VN (split qual), lưu ảnh minh họa vào figures/vn/.
+
+    Luôn dùng ảnh VN (--split bị bỏ qua), --limit chỉ giới hạn số ảnh VN. Pipeline như E0: method E3 chọn,
+    denoise E2 chọn (cả hai trên tune, đọc qua _chosen), nắn quad, binarize theo cfg, segment chiếu dọc
+    (E8_SEGMENTER). Chạy thêm trên crop bbox thật để tách lỗi định vị khỏi lỗi tách ký tự. Ảnh VN không có
+    nhãn ký tự nên "tách hợp lý" chỉ là kiểm tra thô (_seg_plausible), không phải metric. Ghi
+    tables/e8_vn.csv và tối đa 6 hình figures/vn/vn_{success,loc_fail,seg_fail,two_line,colour,night}.png
+    (ví dụ chọn đều theo image_id, không ngẫu nhiên).
+    """
+    recs = load_vn_records(cfg)[: args.limit]
+    if not recs:
+        raise SystemExit("E8: không có ảnh VN (kiểm tra paths.vn và data/vn_custom/images/)")
+    targs = argparse.Namespace(**{**vars(args), "split": "test", "limit": None})   # chạy lại E2/E3 giữ cả dòng tune+test; chọn vẫn chỉ trên tune
+    method = _chosen(cfg, "e3_localization.csv", "method", exp_localization, targs)
+    dn = _chosen(cfg, "e2_filters.csv", "denoise", exp_filters, targs)
+    dcfg = load_config(args.config, {"preprocess": {"denoise": dn}})
+    model = _load_svm(dcfg) if method == "edge_svm" else None
+    meta = _vn_meta(cfg)
+    print(f"E8 n={len(recs)} localize={method} denoise={dn} binarize={cfg['binarize']['method']} "
+          f"segment={E8_SEGMENTER}")
+    rows: list[dict] = []
+    keep: dict[str, tuple] = {}
+    for i, r in enumerate(recs, 1):
+        img = read_image(r.path)
+        cands = localize_edge(img, dcfg)
+        if model is not None:
+            cands = score_candidates(img, cands, model, dcfg)
+        res = vn_image_result(img, r, cands, dcfg)
+        row = vn_row(r, meta.get(r.image_id, {}), res)
+        rows.append(row)
+        keep[r.image_id] = (r, row, res)
+        if i % 25 == 0 or i == len(recs):
+            print(f"  {i}/{len(recs)}")
+    tpath = os.path.join(cfg["paths"]["results"], "tables", "e8_vn.csv")
+    write_csv([{k: row[k] for k in VN_COLS} for row in rows], tpath)
+    df = pd.DataFrame(rows)
+    print(f"loc_ok {int(df['loc_ok'].sum())}/{len(df)}, seg_ok_gt {int(df['seg_ok_gt'].sum())}, "
+          f"seg_ok_pred {int(df['seg_ok_pred'].sum())}")
+    for by in ("n_lines", "plate_colour", "vehicle"):
+        print(f"-- theo {by}")
+        _print_table(summarize_vn(df, by), [by, "n", "loc_ok", "seg_ok_gt", "seg_ok_pred", "chars_gt_med",
+                                            "chars_pred_med"])
+    titles = {"success": "định vị đúng, tách hợp lý", "loc_fail": "định vị sai (IoU < ngưỡng)",
+              "seg_fail": "định vị đúng, tách không hợp lý", "two_line": "biển 2 dòng",
+              "colour": "biển màu (vàng, xanh, đỏ, ngoại giao)", "night": "ảnh ban đêm"}
+    fdir = os.path.join(cfg["paths"]["results"], "figures", "vn")
+    for name, ids in vn_selections(df).items():
+        items = [(*keep[i][:2], keep[i][2], read_image(keep[i][0].path)) for i in ids]
+        fpath = os.path.join(fdir, f"vn_{name}.png")
+        save_vn_figure(items, fpath, f"E8 {titles[name]} (localize={method}+{dn}, segment={E8_SEGMENTER})")
+        print(f"đã ghi {fpath}")
+    print(f"đã ghi {tpath}")
 
 
 EXPERIMENTS: dict[str, Callable[[dict, argparse.Namespace], None]] = {

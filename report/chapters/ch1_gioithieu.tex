@@ -13,7 +13,7 @@ Dự án chỉ dùng xử lý ảnh cổ điển, không dùng học sâu. Các 
 
 Dữ liệu là một tập con của CCPD2019 \cite{ccpd} gồm 660 ảnh có biển xanh Trung Quốc 7 ký tự: nhóm \code{base} 500 ảnh và bốn nhóm khó \code{tilt}, \code{blur}, \code{db} (ngược sáng hoặc chói), \code{challenge}, mỗi nhóm 40 ảnh. Chỉ lấy ảnh có chuỗi biển hợp lệ (đủ 7 ký tự). Mỗi ảnh có đúng một biển. Việc lấy mẫu dùng seed 42.
 
-Ngoài ra có 40 ảnh biển số Việt Nam tự chụp (làm mờ mặt người trước khi đưa vào kho mã), chỉ dùng cho đánh giá định tính (thí nghiệm E8, phần của B). Các ảnh này không dùng để chỉnh ngưỡng, không dùng làm mẫu huấn luyện và không tính vào bảng số liệu, vì phần lớn là biển xe máy hai dòng gần vuông, khác hẳn phân bố của CCPD.
+Ngoài ra có 187 ảnh biển số Việt Nam, chỉ dùng cho đánh giá định tính (thí nghiệm E8, phần của B): 75 ảnh từ bộ Kaggle \code{tanhphp/vietnamese-license-plates} (Apache-2.0), 64 ảnh từ bộ Kaggle \code{duydieunguyen/licenseplates} (license không rõ, chỉ dùng nội bộ) và 48 ảnh lấy bằng tìm kiếm ảnh Brave rồi lọc tay. Ảnh gốc không nằm trong kho mã vì license, kho chỉ giữ metadata. Các ảnh này không dùng để chỉnh ngưỡng, không dùng làm mẫu huấn luyện và không tính vào bảng số liệu, vì phần lớn là biển hai dòng, nhiều biển xe máy, hình dạng gần vuông, khác hẳn phân bố của CCPD. Hiện mới có hộp biển (bbox) cho 139 ảnh Kaggle nên E8 chạy trên 139 ảnh này; 48 ảnh lấy từ Brave chờ gán bbox.
 
 \section{Chia tập tune và test}
 \label{sec:split}
