@@ -1,37 +1,38 @@
-\chapter{PHƯƠNG PHÁP: TIỀN XỬ LÝ, ĐỊNH VỊ, NẮN PHỐI CẢNH}
-\label{chap:a-method}
+\chapter{PHƯƠNG PHÁP}
+\label{chap:method}
 
-Chương này mô tả các bước do thành viên A phụ trách: tiền xử lý ảnh, định vị biển số bằng đặc trưng cạnh và hình thái học, chấm điểm lại ứng viên bằng HOG và SVM tuyến tính, và nắn biển về hình chữ nhật chuẩn bằng phép biến đổi phối cảnh. Dữ liệu, cách chia tập và các độ đo dùng cho phần kết quả được trình bày ở Chương~\ref{chap:intro}. Hai bước sau của pipeline (nhị phân hóa và tách ký tự) do thành viên B trình bày (Chương~\ref{chap:b}).
+Chương này mô tả toàn bộ pipeline theo thứ tự xử lý: tiền xử lý ảnh, phân tích hệ màu của biển, định vị biển số bằng đặc trưng cạnh và hình thái học, chấm điểm lại ứng viên bằng HOG và SVM tuyến tính, nắn biển về hình chữ nhật chuẩn bằng phép biến đổi phối cảnh, nhị phân hóa và tách ký tự. Dữ liệu, cách chia tập và các độ đo được trình bày ở Chương~\ref{chap:intro}; kết quả thí nghiệm ở Chương~\ref{chap:results}.
 
 \section{Luồng xử lý}
 \label{sec:flow}
 
-Dự án chỉ dùng xử lý ảnh cổ điển, không dùng học sâu. Luồng xử lý một ảnh được tóm tắt ở Hình~\ref{fig:pipeline}. Phương pháp A dùng trực tiếp ứng viên có điểm heuristic cao nhất; phương pháp A+SVM xếp lại tối đa 5 ứng viên theo điểm của SVM rồi lấy ứng viên đầu. Biển được nắn về ảnh $220\times 70$ trước khi sang phần B (Chương~\ref{chap:b}).
+Dự án chỉ dùng xử lý ảnh cổ điển, không dùng học sâu. Luồng xử lý một ảnh được tóm tắt ở Hình~\ref{fig:pipeline}. Phương pháp \code{edge} dùng trực tiếp ứng viên có điểm heuristic cao nhất; phương pháp \code{edge\_svm} xếp lại tối đa 5 ứng viên theo điểm của SVM rồi lấy ứng viên đầu. Biển được nắn về ảnh $220\times 70$, sau đó nhị phân hóa và tách ký tự.
 
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
   node distance=5mm and 7mm,
   box/.style={draw, rounded corners=2pt, align=center, minimum height=11mm, text width=27mm, font=\fontsize{7pt}{8pt}\selectfont},
-  boxB/.style={draw, dashed, rounded corners=2pt, align=center, minimum height=11mm, text width=27mm, font=\fontsize{7pt}{8pt}\selectfont},
   arr/.style={-{Stealth[length=2mm]}, thick}]
   \node[box] (in) {Ảnh xe (BGR)};
   \node[box, right=of in] (pre) {Tiền xử lý\\resize rộng 800, xám,\\CLAHE, lọc nhiễu};
   \node[box, right=of pre] (edge) {Định vị theo cạnh\\Sobel-x, Otsu, close/open,\\contour, lọc, NMS};
-  \node[box, right=of edge] (svm) {HOG + SVM\\(chỉ A+SVM)\\xếp lại top-5};
+  \node[box, right=of edge] (svm) {HOG + SVM\\(chỉ \code{edge\_svm})\\xếp lại top-5};
   \node[box, below=of svm] (top1) {Chọn ứng viên top-1\\(bbox + quad)};
   \node[box, left=of top1] (quad) {Ước lượng quad\\approxPolyDP trên\\mặt nạ xanh};
   \node[box, left=of quad] (warp) {Homography\\về ảnh $220\times 70$};
-  \node[boxB, left=of warp] (partb) {Phần B\\nhị phân hóa,\\tách ký tự};
+  \node[box, below=of warp] (binz) {Nhị phân hóa\\(Otsu hoặc adaptive)};
+  \node[box, right=of binz] (seg) {Tách ký tự\\(CCA hoặc projection)};
   \draw[arr] (in) -- (pre);
   \draw[arr] (pre) -- (edge);
   \draw[arr] (edge) -- (svm);
   \draw[arr] (svm) -- (top1);
   \draw[arr] (top1) -- (quad);
   \draw[arr] (quad) -- (warp);
-  \draw[arr] (warp) -- (partb);
+  \draw[arr] (warp) -- (binz);
+  \draw[arr] (binz) -- (seg);
 \end{tikzpicture}
-\caption[Pipeline phần A]{Pipeline phần A. Phương pháp A đi thẳng từ khối định vị sang chọn top-1, bỏ qua khối HOG + SVM.}
+\caption[Pipeline]{Pipeline. Phương pháp \code{edge} đi thẳng từ khối định vị sang chọn top-1, bỏ qua khối HOG + SVM.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -47,7 +48,18 @@ Dự án chỉ dùng xử lý ảnh cổ điển, không dùng học sâu. Luồ
 \end{itemize}
 Mọi tham số của bước định vị phía sau (kernel hình thái, ngưỡng diện tích) tính theo ảnh đã resize về 800 pixel nên không phụ thuộc kích thước ảnh gốc.
 
-\section{Định vị dựa trên cạnh (phương pháp A)}
+\section{Phân tích hệ màu}
+\label{sec:color}
+
+\textbf{Câu hỏi.} Kênh màu nào tách vùng biển khỏi phần còn lại của ảnh tốt nhất? Câu trả lời cho biết có nên định vị trên ảnh xám (như \code{localize\_edge} hiện tại) hay dùng thêm thông tin màu.
+
+\textbf{Cách đo.} Với mỗi ảnh tune, tính histogram chuẩn hóa 64 bin của từng kênh trong bbox biển thật ($p$) và trên phần ảnh còn lại ($q$). Độ tách là khoảng cách Bhattacharyya
+\[
+D(p,q)=\sqrt{1-\sum_{i}\sqrt{p_i\,q_i}},
+\]
+bằng 0 khi hai phân bố trùng nhau và bằng 1 khi không chồng lấn. Bảy kênh được so sánh: ảnh xám, ba kênh HSV (H lấy trong $[0,180)$ theo quy ước OpenCV) và ba kênh Lab. Bảng~\ref{tab:e1} cho trung bình $D$ theo nhóm; E1 luôn chạy trên tune vì chỉ là phân tích dữ liệu, không chọn tham số cho pipeline.
+
+\section{Định vị dựa trên cạnh (\code{edge})}
 \label{sec:edge}
 
 Ý tưởng: vùng biển số chứa nhiều nét đứng dày đặc (cạnh các ký tự), nên đạo hàm theo trục $x$ lớn tập trung ở một vùng chữ nhật nằm ngang. Các bước:
@@ -92,7 +104,7 @@ Số ứng viên giữ lại $k$ & 5 \\
 Thuật toán~\ref{alg:edge} tóm tắt toàn bộ bước định vị theo cạnh.
 
 \begin{algorithm}[htbp]
-\caption{Định vị biển dựa trên cạnh (phương pháp A)}
+\caption{Định vị biển dựa trên cạnh (\code{edge})}
 \label{alg:edge}
 \begin{algorithmic}[1]
 \Require Ảnh xám đã tiền xử lý $I$ (rộng 800 px), số ứng viên giữ lại $k=5$
@@ -117,7 +129,7 @@ Thuật toán~\ref{alg:edge} tóm tắt toàn bộ bước định vị theo c�
 
 Các ngưỡng này được chọn bằng cách quét trên tập tune (mục~\ref{sec:tuning}). Riêng cận dưới của \code{area\_ratio} bám theo phân bố diện tích bbox thật trên tune (phân vị 5\% là 0.0116, lớn nhất 0.153), nhằm loại logo và chữ nhỏ.
 
-\section{Chấm điểm lại ứng viên bằng HOG và SVM (A+SVM)}
+\section{Chấm điểm lại ứng viên bằng HOG và SVM (\code{edge\_svm})}
 \label{sec:hogsvm}
 
 Điểm heuristic chỉ gồm mật độ cạnh, độ lấp đầy và tỉ lệ cạnh nên dễ xếp nhầm chữ hãng xe hay logo lên trên biển thật. Bước này thay điểm đó bằng điểm của bộ phân loại học từ ảnh:
@@ -131,7 +143,7 @@ Các ngưỡng này được chọn bằng cách quét trên tập tune (mục~\
 Thuật toán~\ref{alg:svm} tóm tắt huấn luyện và chấm điểm lại.
 
 \begin{algorithm}[htbp]
-\caption{Huấn luyện SVM và xếp lại ứng viên (A+SVM)}
+\caption{Huấn luyện SVM và xếp lại ứng viên (\code{edge\_svm})}
 \label{alg:svm}
 \begin{algorithmic}[1]
 \Require Ảnh tune (198 ảnh) kèm bbox thật; tối đa $k=5$ ứng viên của \code{localize\_edge} cho ảnh cần xử lý
@@ -164,3 +176,34 @@ SVM chỉ xếp lại tối đa 5 ứng viên mà bước cạnh đã sinh ra, n
 \end{itemize}
 Với bốn góc nguồn $\mathbf{p}_i$ (sắp theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái) và bốn góc đích $(0,0)$, $(219,0)$, $(219,69)$, $(0,69)$, ma trận homography $H\in\mathbb{R}^{3\times 3}$ thỏa $\tilde{\mathbf{x}}'\sim H\tilde{\mathbf{x}}$ (tọa độ thuần nhất) được giải từ bốn cặp điểm, rồi áp dụng nội suy tuyến tính, viền lặp pixel biên. Phương án đối chứng là cắt bbox ngang rồi resize về $220\times 70$ (\code{bbox}), không bù được độ nghiêng.
 
+\section{Nhị phân hóa: Otsu và adaptive}
+\label{sec:binarize}
+
+Đầu vào của bước nhị phân hóa là ảnh biển đã nắn về kích thước $220\times 70$ (mục~\ref{sec:rectify}), chuyển sang ảnh xám. Hàm \code{binarize\_plate} nhận ảnh biển xám này và trả ảnh nhị phân với \emph{ký tự trắng trên nền đen}, theo một trong hai cách.
+
+\textbf{Otsu~\cite{otsu}.} Chọn một ngưỡng toàn cục $t$ cho cả biển, sao cho phương sai giữa hai lớp (pixel $\le t$ và $>t$) lớn nhất:
+\[
+t^{*}=\arg\max_{t}\;\omega_0(t)\,\omega_1(t)\,\big(\mu_0(t)-\mu_1(t)\big)^2,
+\]
+trong đó $\omega_k$ là tỉ lệ pixel và $\mu_k$ là độ sáng trung bình của lớp $k$. Cách này hợp khi histogram của biển có hai đỉnh rõ (nền và chữ) và độ sáng đều trên toàn biển.
+
+\textbf{Adaptive.} Mỗi pixel có ngưỡng riêng $T(x,y)=m_G(x,y)-C$, với $m_G$ là trung bình có trọng số Gauss trong cửa sổ $25\times 25$ quanh pixel và $C=7$ (tham số \code{binarize.adaptive} trong config). Cách này chịu được biển sáng không đều (bóng đổ, chói một bên). Bản cài đặt đầu tiên dùng \code{THRESH\_BINARY} trực tiếp: với biển xanh chữ trắng, vùng nền phẳng thành trắng còn ký tự chỉ còn viền rỗng. Bản sửa dùng Otsu để đoán cực tính (nếu chữ sáng hơn nền thì đảo ảnh xám trước) rồi áp \code{THRESH\_BINARY\_INV}, nên nền phẳng luôn thành đen; một test đơn vị kiểm tra điều này.
+
+Sau đó \code{ensure\_text\_white} đảo ảnh nếu hơn một nửa số pixel là trắng (phòng trường hợp đoán sai cực tính), và \code{clean\_binary} mở hình thái học bằng kernel $2\times 2$ để xóa chấm nhiễu nhỏ.
+
+\section{Tách ký tự: CCA và projection}
+\label{sec:segment}
+
+Cả hai bộ tách nhận ảnh nhị phân (chữ trắng) và trả danh sách hộp ký tự sắp từ trái sang phải. Các ngưỡng hình học tính theo tỉ lệ kích thước biển nên không phụ thuộc độ phân giải; các tham số thí nghiệm (khoảng chiều cao ký tự $[0.4,0.9]$ chiều cao biển, tỉ lệ rộng/cao $[0.10,1.0]$, diện tích tối thiểu 30 px) lấy từ config.
+
+\textbf{CCA (connected component analysis).} Gán nhãn thành phần liên thông 8 hướng, rồi:
+{\sloppy
+\begin{enumerate}
+  \item bỏ viền và nhiễu: thành phần rộng hơn 30\% biển mà rỗng (tỉ lệ lấp đầy dưới 0.35) là viền biển; thành phần có tâm theo chiều dọc ngoài khoảng $[0.25,0.75]$ chiều cao là ốc vít hoặc mép. Khối rộng nhưng đặc (nhiều ký tự dính nhau) được \emph{giữ lại} để cắt ở bước 4, thay vì bị xóa như viền;
+  \item gộp các mảnh chồng nhau theo chiều ngang (chồng $\ge 50\%$), vì ký tự Hán thường vỡ thành nhiều nét xếp chồng; sau đó mới bỏ mảnh dẹt đứng riêng (cao dưới 20\% biển);
+  \item gộp mảnh hẹp (rộng/cao $<0.15$) với mảnh kề nếu khe đủ nhỏ, để không mất các nét dọc rời của ký tự Hán;
+  \item lọc theo chiều cao, tỉ lệ và diện tích, rồi \code{merge\_split\_boxes}: gọi $w_{\mathrm{med}}$ là trung vị chiều rộng hộp và $g$ là trung vị khe giữa các hộp kề; hai hộp hẹp ($<0.75\,w_{\mathrm{med}}$) gần nhau được gộp nếu hộp gộp không quá $1.4\,w_{\mathrm{med}}$; hộp rộng $w\ge 1.7\,w_{\mathrm{med}}$ được cắt đều thành $\operatorname{round}\big((w+g)/(w_{\mathrm{med}}+g)\big)$ phần (tối đa 3).
+\end{enumerate}
+\par}
+
+\textbf{Projection.} Sau khi bỏ viền và ốc vít theo cùng luật, \code{split\_lines} chiếu theo hàng để tách dòng (CCPD chỉ có biển một dòng; trường hợp hai dòng được kiểm bằng test giả). Trong mỗi dòng, profile cột là số pixel trắng của từng cột; cột có ít nhất 10\% chiều cao dòng là trắng được coi là cột chữ. Các dải cột chữ cách nhau dưới 2 px được nối, dải hẹp được nối với dải kề (ký tự Hán vỡ), dải dưới 4 px bị bỏ. Dải rộng $\ge 1.7\,w_{\mathrm{med}}$ được cắt tại cột có ít pixel trắng nhất (``thung lũng'') trong khoảng $\pm 0.3\,w_{\mathrm{med}}$ quanh vị trí cắt dự kiến, thay vì cắt đều như CCA. Cuối cùng mỗi hộp được co theo chiều dọc về phần có chữ và lọc như CCA.

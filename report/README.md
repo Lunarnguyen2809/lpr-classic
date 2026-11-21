@@ -1,14 +1,15 @@
-# Báo cáo giữa kỳ, phần A (LaTeX, mẫu báo cáo HUS, pdfLaTeX)
+# Báo cáo giữa kỳ (LaTeX, mẫu báo cáo HUS, pdfLaTeX)
 
 Cấu trúc:
 
-- `main.tex`: preamble theo mẫu HUS (extbook 13pt, T5, babel vietnamese, mathptmx), trang bìa, bảng phân công, xác nhận, mục lục, danh mục hình và bảng, `\include` các chương, tài liệu tham khảo (`thebibliography`). Thông tin bìa (môn, giảng viên, học kỳ, tên và MSSV) khai báo bằng macro ở đầu file; `\TODO{...}` hiện chữ đỏ, chỉ còn dùng cho phần của Bích.
+- `main.tex`: preamble theo mẫu HUS (extbook 13pt, T5, babel vietnamese, mathptmx), trang bìa, xác nhận, mục lục, danh mục hình và bảng, `\include` các chương, tài liệu tham khảo (`thebibliography`). Thông tin bìa (môn, giảng viên, học kỳ, tên và MSSV) khai báo bằng macro ở đầu file.
 - `chapters/ch1_gioithieu.tex`: bài toán, dữ liệu, chia tập, độ đo.
-- `chapters/ch2_phuongphap_a.tex`, `ch3_ketqua_a.tex`, `ch4_phantichloi.tex`: phần A (phương pháp, kết quả, phân tích lỗi).
-- `chapters/ch5_phan_b.tex`: chương dành cho Bích (E1, E5, E6, E8), hiện là `\TODO`.
+- `chapters/ch2_phuongphap.tex`: phương pháp theo thứ tự pipeline (tiền xử lý, phân tích hệ màu, định vị, HOG + SVM, nắn phối cảnh, nhị phân hóa, tách ký tự).
+- `chapters/ch3_ketqua.tex`: kết quả thực nghiệm E1 đến E8 (E8 chỉ định tính).
+- `chapters/ch4_thaoluan.tex`: phân tích lỗi (triage), quan sát định tính, thảo luận, hạn chế, hướng cải thiện.
 - `chapters/ketluan.tex`: kết luận.
 - `tables/*.tex`: bảng sinh tự động từ CSV (mỗi file là một môi trường `table` đầy đủ: caption, label, hàng tiêu đề xanh chữ trắng đậm).
-- `figures/`, `image/HUS.png`: hình và logo.
+- `figures/`, `image/HUS.png`: hình và logo (`e1_hist.png`, `e5_binarize.jpg`, `e6_segment.jpg` là hình E1, E5, E6).
 - `make_figures.py`: sinh `tables/*.tex` và `figures/e3_subset_r1.png`.
 - `check_tex.py`: kiểm tra nhanh (gói chỉ dành cho XeLaTeX như `fontspec`, ký tự Unicode không an toàn với T5, cân bằng `\begin`/`\end`, ngoặc, đường dẫn `\input`/`\include`/`\includegraphics`, `\ref`/`\cite` có đích, ký tự `_ # % &` chưa escape, macro cần gói).
 
@@ -33,5 +34,5 @@ Thư mục CSV là đầu ra của `experiments/run_all.py` và `experiments/tri
 
 ## Ghi chú số liệu
 
-- Mọi số E2/E3/E4/E7 và triage lấy từ CSV. Quy tắc làm tròn (một lần, half-up): P, R, F1 và các tỉ lệ tính từ số đếm (`tp/fp/fn`, số ảnh) rồi mới làm tròn 3 chữ số, không làm tròn lại từ giá trị 4 chữ số trong CSV (vd. 148/198 = 0.7475 hiển thị 0.747; 1/16 = 0.0625 hiển thị 0.063). Bảng resize, quét tham số, Issue #10 và HOG+SVM lấy từ `notes.md` (không có CSV).
+- Mọi số E2/E3/E4/E7 và triage lấy từ CSV. Quy tắc làm tròn (một lần, half-up): P, R, F1 và các tỉ lệ tính từ số đếm (`tp/fp/fn`, số ảnh) rồi mới làm tròn 3 chữ số, không làm tròn lại từ giá trị 4 chữ số trong CSV (vd. 148/198 = 0.7475 hiển thị 0.747; 1/16 = 0.0625 hiển thị 0.063). Bảng resize, quét tham số, tinh chỉnh bộ lọc ứng viên và HOG+SVM lấy từ `notes.md` (không có CSV).
 - Thời gian E7 và E2 (ms) đo trên máy ít tải hơn lần ghi trong `notes.md`; báo cáo dùng số từ CSV, số đo lại ghi ở mục "Đo lại thời gian (máy ít tải)" (2026-11-11) trong `notes.md`. Tỉ lệ giữa các bước cũng dịch theo tải máy (tiền xử lý 44% -> 50%) nên chỉ là gần đúng.

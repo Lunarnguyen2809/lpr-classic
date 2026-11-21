@@ -4,9 +4,8 @@
 \documentclass[13pt, a4paper, oneside]{extbook}
 
 % =========================================================
-% THÔNG TIN BÌA (\TODO chỉ còn dùng cho phần của Bích)
+% THÔNG TIN BÌA
 % =========================================================
-\newcommand{\TODO}[1]{\textcolor{red}{[#1]}}
 \newcommand{\MonHoc}{MAT3562E -- Computer Vision}
 \newcommand{\GiangVien}{TS. Cao Văn Chung}
 \newcommand{\HocKy}{Học kỳ 1, năm học 2026--2027}
@@ -88,7 +87,7 @@
 % Cột X (tabularx) căn giữa / căn trái cho bảng dữ liệu dàn đủ bề rộng chữ
 \newcolumntype{C}{>{\centering\arraybackslash}X}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
-% Độ giãn dòng mặc định của bảng; các bảng đặc biệt (trang bìa, phân công, ký tên) tự đặt trong nhóm riêng
+% Độ giãn dòng mặc định của bảng; các bảng đặc biệt (trang bìa, ký tên) tự đặt trong nhóm riêng
 \renewcommand{\arraystretch}{1.25}
 % Ô tiêu đề bảng: nền xanh, chữ trắng đậm
 \newcommand{\tblhd}[1]{\cellcolor{tableheader}\textcolor{white}{\bfseries #1}}
@@ -299,35 +298,8 @@
 \newpage
 
 % =========================================================
-% PHÂN CÔNG NHIỆM VỤ & XÁC NHẬN
+% XÁC NHẬN
 % =========================================================
-\chapter*{PHÂN CÔNG NHIỆM VỤ}
-{\addcontentsline{toc}{chapter}{Phân công nhiệm vụ}}
-\baselineskip
-25pt
-\begin{center}
-    \renewcommand{\arraystretch}{1.7}
-    \begin{tabular}{|m{10cm}|m{4.5cm}|}
-        \hline
-        \textbf{Công việc }& \textbf{Người phụ trách} \\
-   \hline
-   Tiền xử lý, định vị dựa trên biên và HOG-SVM, nắn phối cảnh &  \TenA \\
-   \hline
-   Đánh giá (evaluate), trực quan hóa, thí nghiệm E2, E3, E4, E7, phân tích lỗi (triage) &  \TenA \\
-   \hline
-   Phân tích hệ màu (E1), nhị phân hóa (E5), tách ký tự CCA và projection (E6) &  \TenB \\
-   \hline
-   Khung run\_all và E0, gán nhãn ký tự, ảnh VN định tính (E8) &  \TenB \\
-   \hline
-   Hoàn thiện, chỉnh sửa báo cáo & Tất cả các thành viên \\
-   \hline
-   Hoàn thiện chỉnh sửa slide & Tất cả các thành viên \\
-        \hline
-    \end{tabular}
-\end{center}
-
-\newpage
-
 \begin{center}
     \textbf{\Large XÁC NHẬN CỦA CÁC THÀNH VIÊN NHÓM}
 \end{center}
@@ -366,10 +338,9 @@
 % NỘI DUNG
 % =========================================================
 \include{chapters/ch1_gioithieu}
-\include{chapters/ch2_phuongphap_a}
-\include{chapters/ch3_ketqua_a}
-\include{chapters/ch4_phantichloi}
-\include{chapters/ch5_phan_b}
+\include{chapters/ch2_phuongphap}
+\include{chapters/ch3_ketqua}
+\include{chapters/ch4_thaoluan}
 \include{chapters/ketluan}
 
 \chapter*{TÀI LIỆU THAM KHẢO}
