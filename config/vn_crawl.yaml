@@ -1,0 +1,143 @@
+# Cấu hình crawl ảnh biển số VN bằng Brave Image Search (scripts/crawl_vn_brave.py, SPEC mục 5.4).
+# 200 chỉ là quota CRAWL (final_quota cộng lại), không phải cỡ bộ cuối (~150–200 sau lọc, do build_vn_set.py dựng từ selection.csv); crawl gấp candidate_multiplier lần để còn loại tay.
+# Ghi chú API (đã thử): endpoint images chỉ nhận search_lang, KHÔNG nhận country=VN (422);
+# offset không phân trang (trả lại y hệt) -> mỗi query chỉ lấy tối đa 100 kết quả, nhiều query/category.
+# Ảnh một category có thể trùng category khác về nội dung; dedupe sha256 + dHash chạy xuyên mọi category.
+search_lang: vi
+safesearch: "off"
+count: 100
+candidate_multiplier: 2
+
+# Từ khóa loại theo tiêu đề (so khớp không phân biệt hoa thường), áp cho mọi category.
+exclude_title:
+  - vector
+  - logo
+  - clipart
+  - svg
+  - icon
+  - template
+  - mockup
+  - mẫu
+  - thiết kế
+  - phôi
+  - font
+  - minecraft
+  - gta
+  - lego
+  - đồ chơi
+  - mô hình
+  - tra cứu
+  - ý nghĩa
+  - infographic
+
+categories:
+  # ---- màu / loại biển ----
+  white_private:
+    final_quota: 34
+    queries:
+      - biển số xe ô tô trắng chữ đen ảnh thực tế
+      - xe ô tô cá nhân biển trắng đậu trên đường
+      - biển số xe máy trắng chữ đen chụp cận
+      - white Vietnam license plate car photo
+      - biển số ô tô 30A 51G ảnh chụp xe
+  yellow_business:
+    final_quota: 18
+    queries:
+      - biển số vàng xe kinh doanh vận tải ảnh thực tế
+      - xe taxi biển vàng chữ đen
+      - xe khách xe tải biển vàng
+      - Vietnam yellow license plate taxi
+  blue_gov:
+    final_quota: 14
+    queries:
+      - biển số xanh dương xe cơ quan nhà nước ảnh thực tế
+      - xe công biển xanh chữ trắng
+      - Vietnam blue license plate government car
+  red_military:
+    final_quota: 8
+    queries:
+      - biển số đỏ xe quân đội ảnh thực tế
+      - xe quân sự biển đỏ chữ trắng
+      - Vietnam red military license plate
+  diplomatic:
+    final_quota: 8
+    queries:
+      - biển số ngoại giao NG xe đại sứ quán ảnh thực tế
+      - biển số NN xe người nước ngoài
+      - Vietnam diplomatic license plate NG
+  old_temp:
+    final_quota: 8
+    queries:
+      - biển số xe cũ biển tạm thời ảnh thực tế
+      - biển số tạm giấy xe mới mua dán kính
+      - biển số xe cũ kiểu cũ nền xanh chữ trắng
+      - old Vietnam license plate photo
+  # ---- hình dạng ----
+  car_one_line:
+    final_quota: 14
+    queries:
+      - biển số ô tô một dòng biển dài ảnh thực tế
+      - đầu xe ô tô biển số dài phía trước
+      - Vietnam car license plate long format front view
+  car_two_line:
+    final_quota: 12
+    queries:
+      - biển số ô tô hai dòng biển vuông ảnh thực tế
+      - biển số vuông ô tô gắn đuôi xe
+      - Vietnam square license plate car two lines
+  moto_two_line:
+    final_quota: 14
+    queries:
+      - biển số xe máy hai dòng ảnh thực tế
+      - đuôi xe máy biển số xe chụp từ phía sau
+      - Vietnam motorbike license plate two-line photo
+  # ---- điều kiện chụp ----
+  night:
+    final_quota: 12
+    queries:
+      - biển số xe ban đêm ảnh chụp đường phố
+      - ô tô biển số ban đêm đèn pha
+      - Vietnam license plate night photo
+  rain_wet:
+    final_quota: 8
+    queries:
+      - biển số xe trời mưa ướt ảnh thực tế
+      - xe ô tô biển số dưới mưa
+      - Vietnam license plate rain wet
+  blur_motion:
+    final_quota: 8
+    queries:
+      - biển số xe mờ nhòe ảnh chụp chuyển động
+      - ảnh biển số xe bị mờ khó đọc
+      - Vietnam blurry license plate motion
+  oblique:
+    final_quota: 8
+    queries:
+      - biển số xe chụp nghiêng góc xéo ảnh thực tế
+      - xe ô tô chụp chéo góc biển số
+      - Vietnam license plate angled view
+  dirty_worn:
+    final_quota: 8
+    queries:
+      - biển số xe bẩn che khuất bùn đất ảnh thực tế
+      - biển số xe cũ trầy xước mờ bong tróc
+      - Vietnam dirty damaged license plate
+  cctv:
+    final_quota: 10
+    queries:
+      - camera giám sát biển số xe ảnh chụp từ camera
+      - camera phạt nguội biển số xe
+      - camera bãi xe trạm thu phí nhận diện biển số
+      - Vietnam toll station license plate camera image
+  far_small:
+    final_quota: 8
+    queries:
+      - xe trên đường phố biển số nhỏ ở xa ảnh thực tế
+      - ảnh giao thông nhiều xe máy ô tô đường phố Việt Nam
+      - Vietnam traffic street cars motorbikes
+  closeup_clear:
+    final_quota: 8
+    queries:
+      - cận cảnh biển số xe rõ nét ảnh thực tế
+      - biển số xe chụp cận nét chữ số rõ
+      - close up Vietnam license plate clear

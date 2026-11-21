@@ -79,7 +79,7 @@ flowchart TD
     B1 --> B3["data/annotations.csv<br/>(parse từ tên file)"]
     B3 --> C1["make_splits.py<br/>tune 30% / test 70%<br/>phân tầng theo subset"]
     C1 --> C2["data/splits.csv"]
-    V1["Ảnh VN tự chụp + nhãn CVAT"] --> V2["data/vn_custom/<br/>split = qual"]
+    V1["Ảnh VN: Kaggle công khai + crawl Brave duyệt tay<br/>build_vn_set.py"] --> V2["data/vn_custom/<br/>split = qual"]
     V2 --> C2
 ```
 
@@ -96,7 +96,7 @@ flowchart LR
     P2 --> TR
     TB --> REP["Báo cáo chương 2"]
     TR --> REP
-    Q["40 ảnh VN (qual)"] --> E8["exp_vn_qualitative<br/>→ results/figures/vn/"]
+    Q["187 ảnh VN (qual)"] --> E8["exp_vn_qualitative<br/>→ results/figures/vn/"]
 ```
 
 ### 2.4 Phụ thuộc giữa module và chủ sở hữu
@@ -134,14 +134,19 @@ lpr-classic/
 ├── pyproject.toml
 ├── .gitignore
 ├── config/
-│   └── default.yaml
+│   ├── default.yaml
+│   └── vn_crawl.yaml          # query + quota crawl ảnh VN
 ├── data/
 │   ├── raw/                   # file nén + thư mục giải nén (gitignore)
 │   ├── ccpd_subset/           # 660 ảnh đã lấy mẫu (gitignore, chia sẻ qua Drive)
 │   │   ├── base/ tilt/ blur/ db/ challenge/
 │   ├── vn_custom/
-│   │   ├── images/            # 40 ảnh tự chụp, đã làm mờ mặt
-│   │   └── annotations.csv
+│   │   ├── images/            # 187 ảnh VN đã lọc (vn_0001.jpg...), dựng bởi build_vn_set.py; KHÔNG commit (gitignore, license)
+│   │   ├── candidates/        # ứng viên crawl + manifest.csv + _sheets/ (gitignore)
+│   │   ├── selection.csv      # danh sách ảnh được chọn + thẻ (đầu vào của build_vn_set.py)
+│   │   ├── sources.csv        # nguồn gốc, license, thẻ từng ảnh
+│   │   ├── annotations.csv    # bbox (ảnh Kaggle); ảnh crawl chờ CVAT
+│   │   └── todo_cvat.txt      # ảnh crawl chưa có bbox
 │   ├── char_labels/
 │   │   └── char_boxes.csv     # bbox ký tự gán tay cho 30 biển
 │   ├── annotations.csv
@@ -149,6 +154,8 @@ lpr-classic/
 ├── scripts/
 │   ├── download_data.py
 │   ├── build_subset.py
+│   ├── crawl_vn_brave.py      # crawl ứng viên + contact sheet (5.4)
+│   ├── build_vn_set.py        # dựng bộ ảnh VN từ selection.csv (5.4)
 │   └── make_splits.py
 ├── src/lpr/
 │   ├── __init__.py
@@ -259,17 +266,35 @@ Ví dụ trên giải mã thành `皖AY339S`. Quad trong toàn repo được lư
 | db | 40 | 12 | 28 |
 | challenge | 40 | 12 | 28 |
 | **Tổng CCPD** | **660** | **198** | **462** |
-| vn_custom | 40 | – | – (split `qual`) |
+| vn_custom | 187 (~150–200 sau lọc) | – | – (split `qual`) |
 
 - Seed cố định `42`.
 - Chỉ lấy ảnh có chuỗi biển hợp lệ (đủ 7 ký tự, không chứa `O`).
 - Ảnh được copy và đổi tên thành `<image_id>.jpg` với `image_id = f"{subset}_{i:04d}"` để đường dẫn ngắn. Tên gốc giữ trong cột `orig_name`.
 
-### 5.4 Ảnh VN tự chụp
+### 5.4 Ảnh VN (dataset Kaggle công khai + crawl Brave duyệt tay)
 
-- 40 ảnh, làm mờ mặt người trước khi đưa vào repo.
-- Gán bbox biển bằng CVAT hoặc LabelImg, xuất về `data/vn_custom/annotations.csv` với các cột: `image_id, file, x1, y1, x2, y2, n_lines`.
-- **Chỉ dùng test định tính** (split `qual`). Không dùng để chỉnh ngưỡng heuristic, không làm patch HOG, không tính vào bảng số liệu. Lý do: phần lớn là biển xe máy 2 dòng gần vuông, khác hẳn phân bố của CCPD.
+- Tổng số ảnh là **~150–200 sau lọc chặt** (không độn cho đủ 200); bản hiện tại: **187 ảnh**, mọi ảnh split `qual`.
+- **`data/vn_custom/images/` không nằm trong git** (gitignore, chỉ giữ `.gitkeep`) vì license: ảnh crawl là `internal_only`, `duydieunguyen` là unknown. Chỉ metadata (`selection.csv`, `sources.csv`, `annotations.csv`, `todo_cvat.txt`) được commit. Dựng lại ảnh cục bộ: tải 2 dataset Kaggle về `data/raw/vn_kaggle/` (kaggle CLI, cần token), chạy crawl để có `candidates/`, rồi `scripts/build_vn_set.py` từ `selection.csv`.
+- Nguồn và license (cột `source`, `license` trong `sources.csv`):
+
+| source | số ảnh | license | nhãn bbox |
+| --- | --- | --- | --- |
+| `kaggle_tanhphp` (`tanhphp/vietnamese-license-plates`, chỉ ảnh gốc, loại mọi tên có `_aug`) | 75 | Apache-2.0 (theo metadata Kaggle; zip không kèm file license) | YOLO bbox -> pixel |
+| `kaggle_duydieunguyen` (`duydieunguyen/licenseplates`, camera barie bãi xe + ảnh đường phố) | 64 | không rõ (unknown), chỉ dùng nội bộ báo cáo học thuật | YOLO polygon -> hình chữ nhật bao |
+| `brave_crawl` (Brave Image Search, duyệt tay) | 48 | internal_only (giữ URL trang nguồn, không phát hành lại) | chưa có, gán bằng CVAT |
+
+- Lớp của `duydieunguyen` đã kiểm bằng mắt và tỉ lệ khung: lớp 0 (`BSD`) là biển 1 dòng (dài, w/h trung bình 3.4), lớp 1 (`BSV`) là biển 2 dòng (vuông, w/h 1.3); khớp `dataset.yaml`, không bị đảo.
+- Lấy mẫu để đa dạng, không ngẫu nhiên: Kaggle lọc heuristic (độ sáng cho đêm, phương sai Laplacian cho mờ, diện tích bbox cho xa/nhỏ, số bbox cho đông xe, tỉ lệ khung cho 1/2 dòng), dedupe dHash (hamming ≤ 8) với `duydieunguyen` rồi chia tầng theo tiền tố tên file (greenpack, carlong, Tgmt, Dieu, Hung) và theo lớp; sau đó xem contact sheet để loại biển bị che/không đọc được, trùng lặp, ảnh đồ họa/ghép, ảnh quá nhỏ (seed 42). Phân bố hiện tại (tính từ `sources.csv`): biển trắng 151, vàng 13, ngoại giao 9, xanh 7, đỏ 7; ô tô 101, xe máy 65, xe tải 20, xe buýt 1; 1 dòng 64, 2 dòng 123; điều kiện (một ảnh có nhiều thẻ, mọi ảnh có ít nhất một thẻ): ngày 148, đêm 39, chính diện 51, cận cảnh 47, nghiêng 31, xa 27, camera 21, mờ 12, đông xe 9, bẩn 2, mưa 1.
+- Quy trình:
+  1. (chỉ ảnh crawl) `python scripts/crawl_vn_brave.py` (cần `BRAVE_API_KEY`) lưu ứng viên vào `data/vn_custom/candidates/<category>/vnc_<sha12>.jpg|png` + `manifest.csv` (status `hold`; cột `file` là đường dẫn file đã lưu so với `candidates/`; `sha256`/`dhash`/`mime` mô tả byte gốc). Dedupe sha256 và dHash (hamming ≤ 6); chạy lại được. `--contact-sheet` dựng lưới duyệt ở `candidates/_sheets/`. Ảnh vector/mẫu thiết kế/minh họa/ghép bị loại. Đã chạy xong; không cần chạy lại.
+  2. Ghi lựa chọn vào `data/vn_custom/selection.csv` (cột `source, source_ref, plate_colour, vehicle, n_lines, conditions`; `source_ref` là `candidate_id` hoặc đường dẫn tương đối dưới `data/raw/vn_kaggle/`; `conditions` cách nhau bằng `;`, giá trị: day, night, rain, blur, oblique, dirty, cctv, far, closeup, frontal, crowded).
+  3. `python scripts/build_vn_set.py --selection data/vn_custom/selection.csv [--force]` (xác định theo selection.csv) đánh số `vn_0001.jpg...` theo thứ tự nguồn (crawl, tanhphp, duydieunguyen) rồi `source_ref`, đổi sang JPEG q95 vào `data/vn_custom/images/`, ghi `sources.csv` (`image_id, file, source, source_ref, original_url, license, plate_colour, vehicle, n_lines, conditions`), `annotations.csv` và `todo_cvat.txt`. Từ chối chạy nếu `images/` đã có file (trừ `.gitkeep`) khi thiếu `--force`; với `--force` chỉ xoá `vn_*.jpg` và từ chối nếu có file lạ khác; từ chối ảnh Kaggle có `_aug`. Đây là script duy nhất ghi các file này (`--promote` cũ của `crawl_vn_brave.py` đã bỏ). `--sheet OUT.jpg` dựng lưới có GT đỏ để soát bbox (`_sheet_final.jpg`, gitignore).
+  4. `annotations.csv` (`image_id, file, x1, y1, x2, y2, n_lines`, pixel nguyên, kẹp trong ảnh, **một dòng mỗi ảnh**) chỉ có ảnh Kaggle (biển lớn nhất nếu ảnh có nhiều biển). Ảnh crawl chưa có bbox nên liệt kê ở `todo_cvat.txt`; gán bbox bằng CVAT hoặc LabelImg rồi nối dòng vào `annotations.csv` (ảnh chưa có dòng thì `load_vn_records` và `make_splits.py` chưa thấy, tức chưa vào `qual`).
+- Ảnh Kaggle gốc PNG bị mã hoá lại thành JPEG q95 (mất nhẹ chi tiết, không phải byte gốc); ảnh JPEG cũng mã hoá lại q95.
+- Ảnh có nhiều biển (22 ảnh Kaggle): bbox trong `annotations.csv` là biển lớn nhất, và mọi thẻ (`plate_colour`, `vehicle`, `n_lines`, `conditions`) mô tả đúng biển đó chứ không phải xe nổi bật nhất trong ảnh; đã soát bằng mắt từng ảnh. `n_lines` của `duydieunguyen` lấy từ lớp nhãn (lớp 0 = 1 dòng, 1 = 2 dòng) và `build_vn_set.py` cảnh báo nếu `selection.csv` lệch; `n_lines` của `tanhphp` là heuristic w/h > 2.3, đã kiểm mắt trên các ảnh nhiều biển. `conditions` luôn có ít nhất một thẻ (ngày/đêm kèm góc chụp hoặc khoảng cách); giá trị rỗng không được dùng.
+- `plate_colour`, `vehicle`, `n_lines`, `conditions` chỉ là thẻ mô tả. Với ảnh Kaggle, `plate_colour` do heuristic màu + kiểm mắt (mặc định trắng), có thể sai khi biển lệch màu do ánh sáng; `vehicle` và `conditions` gán tay/heuristic.
+- **Chỉ dùng test định tính** (split `qual`). Không dùng để chỉnh ngưỡng heuristic, không làm patch HOG, không tính vào bảng số liệu. Lý do: tập trộn ô tô và xe máy, biển 1 dòng và 2 dòng, nhiều màu biển và chất lượng ảnh không đồng nhất, phân bố khác hẳn CCPD (biển xanh Trung Quốc 1 dòng, chụp chuẩn), ảnh nhiều biển chỉ gán bbox biển lớn nhất, và nhãn phần lớn do dataset bên thứ ba cung cấp.
 
 ### 5.5 Schema file dữ liệu
 
@@ -708,6 +733,8 @@ Hai file này phải xuất **trước trưa ngày 8** để A làm triage lỗi
 |---|---|
 | test_ccpd | Tên file ví dụ ở mục 5.2 cho ra bbox `(154, 383, 386, 473)`, text `皖AY339S`, quad TL = `(154, 383)`, TR = `(363, 402)`, BR = `(386, 473)`, BL = `(177, 454)`; tên sai định dạng raise ValueError |
 | test_splits | 660 dòng CCPD; mỗi subset tỉ lệ tune xấp xỉ 30%; không image_id nào nằm ở 2 split; ảnh VN đều là `qual` |
+| test_build_vn_set | bbox YOLO/polygon -> pixel và kẹp trong ảnh; tên file `_aug` bị từ chối; đánh số `vn_NNNN` theo thứ tự nguồn rồi `source_ref`, bbox biển lớn nhất, chạy lại `--force` ra byte y hệt; `n_lines` ảnh `duydieunguyen` lấy từ lớp nhãn (cảnh báo khi selection lệch); `--force` từ chối khi `images/` có file lạ; `load_vn_records` đọc được `annotations.csv` |
+| test_crawl_vn | dHash ảnh gần trùng vs khác; dedupe sha256 + dHash; quota và lọc tiêu đề; resume từ manifest; contact sheet; webp -> png; giới hạn kích thước tải; retry 429; dừng/tiếp tục theo quota, crash giữa chừng không đánh dấu xong; manifest thiếu cột `file` |
 | test_evaluate | IoU hai hộp trùng = 1, rời = 0; prf với số liệu tay |
 | test_rectify | order_quad đúng với 4 điểm bị xáo trộn |
 

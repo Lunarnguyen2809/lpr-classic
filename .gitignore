@@ -6,3 +6,7 @@ __pycache__/
 .venv/
 *.egg-info/
 .pytest_cache/
+data/vn_custom/candidates/
+data/vn_custom/_sheet_final.jpg
+data/vn_custom/images/*
+!data/vn_custom/images/.gitkeep
