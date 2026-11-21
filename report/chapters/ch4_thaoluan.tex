@@ -1,5 +1,5 @@
 \chapter{PHÂN TÍCH LỖI VÀ THẢO LUẬN}
-\label{chap:a-discussion}
+\label{chap:discussion}
 
 \section{Triage lỗi theo bước pipeline}
 \label{sec:triage}
@@ -92,6 +92,13 @@ Hình~\ref{fig:grids} cho một ví dụ cho mỗi bước lỗi, trích từ c�
   \item {\sloppy \textbf{Theo mức nghiêng và mờ.} Mã hóa CCPD cho góc nghiêng ngang/dọc và độ mờ; chỉ dùng so sánh tương đối. Trung bình, ảnh \code{ok} có giá trị nghiêng cao nhất (86 và 82) so với \code{loc\_no\_candidate} (48 và 47) và \code{rectify} (66 và 63); độ mờ trung bình 58 ở \code{ok} so với 45 ở \code{loc\_no\_candidate}. Các giá trị này theo quy ước mã hóa của CCPD nên không nên hiểu là góc thật hay độ mờ thật.\par}
 \end{itemize}
 
+\section{Thảo luận}
+\label{sec:discuss}
+
+Gộp các thí nghiệm lại, nút thắt của pipeline nằm ở định vị và nắn chứ không phải ở bộ tách ký tự. Với projection, \code{all\_correct} giảm từ 0.626 (crop \code{gt}) xuống 0.219 (crop \code{pred}) (Bảng~\ref{tab:e6}): khoảng 1/4 ảnh test định vị sai, và trong các ảnh định vị đúng nhưng tách sai, phần lớn (152/257) sẽ tách đúng nếu crop chính xác (Bảng~\ref{tab:cross}). Phân tích hệ màu (E1, mục~\ref{sec:e1}) cho thấy kênh b và H tách biển nền xanh khỏi nền tốt hơn hẳn ảnh xám mà bước định vị đang dùng, nên nguồn ứng viên theo màu là hướng bổ sung hợp lý cho khâu sinh ứng viên.
+
+Mọi bước được xây và chọn tham số trên CCPD nền xanh, một dòng, 7 ký tự. Khi chạy thử trên ảnh biển Việt Nam (E8, chỉ định tính, mục~\ref{sec:e8}), chỉ biển ô tô một dòng nền trắng còn định vị được khá; biển hai dòng và biển xe máy gần như thất bại, và với biển hai dòng bộ tách vẫn sai ngay cả khi có bbox thật. Nghĩa là các giả định hình học và màu của CCPD (một dòng, nền xanh, tỉ lệ cố định) ngấm vào cả khâu định vị lẫn khâu tách, chứ không chỉ riêng một bước. Ở khâu nhị phân hóa và tách ký tự, Otsu và adaptive cho kết quả tương đương (mục~\ref{sec:e5}), còn projection tốt hơn CCA một cách ổn định trên cả tune và test (mục~\ref{sec:e6}).
+
 \section{Hạn chế}
 \label{sec:limits}
 
@@ -100,10 +107,13 @@ Hình~\ref{fig:grids} cho một ví dụ cho mỗi bước lỗi, trích từ c�
   \item \textbf{IoU trục ngang phạt biển nghiêng.} Độ đo IoU dùng bbox ngang, nên biển nghiêng bị chấm thấp dù ứng viên bám đúng biển; điều này góp phần vào \code{loc\_no\_candidate}. Chưa dùng IoU của đa giác nghiêng.
   \item \textbf{Thời gian đo trên máy không rảnh.} Lần chạy dùng trong báo cáo (khoảng 140 ms/ảnh) đo trên máy ít tải hơn lần ghi trong sổ (416 ms/ảnh) nhưng vẫn không phải máy chuyên dụng. Tỉ lệ giữa các bước cũng dịch theo tải máy (tiền xử lý 44\% $\to$ 50\%, Sobel cùng morph 51\% $\to$ 45\%), nên chỉ xem là gần đúng; số đo lại ghi ở mục ``Đo lại thời gian (máy ít tải)'' trong \code{notes.md}.
   \item \textbf{Rò rỉ nhẹ ở kiểm chứng chéo của SVM.} Chia fold theo patch chứ không theo ảnh, nên số CV (F1 0.919) lạc quan; số định vị trên test mới phản ánh chất lượng thực. Số tune của \code{edge\_svm} cũng lạc quan vì huấn luyện trên chính tune.
-  \item \textbf{Các nhóm khó rất nhỏ.} Mỗi nhóm \code{blur}, \code{db}, \code{challenge}, \code{tilt} chỉ 28 ảnh test (12 ảnh tune); một ảnh là 0.036, nên các so sánh (kể cả ngoại lệ \code{blur} ở E4) có độ bất định lớn. Chúng tôi chưa tính khoảng tin cậy và chỉ có một lần chia tune/test.
-  \item \textbf{Một số lựa chọn dựa trên tune nhỏ.} Việc chọn \code{approxpoly} dựa trên 128 ảnh tune và khác biệt không có ý nghĩa thống kê; ngưỡng triage 22.3 px dựa trên 50 ảnh.
+  \item \textbf{Các nhóm khó rất nhỏ.} Mỗi nhóm \code{blur}, \code{db}, \code{challenge}, \code{tilt} chỉ 28 ảnh test (12 ảnh tune); một ảnh là 0.036, nên các so sánh (kể cả ngoại lệ \code{blur} ở E4) có độ bất định lớn. Chúng tôi chưa tính khoảng tin cậy và chỉ có một lần chia tune/test. Đánh giá theo hộp ký tự gán tay chỉ có 30 biển, mỗi nhóm khó 2 biển, nên số theo nhóm khó chỉ để tham khảo.
+  \item \textbf{Một số lựa chọn dựa trên tune nhỏ.} Việc chọn \code{approxpoly} dựa trên 128 ảnh tune và khác biệt không có ý nghĩa thống kê; ngưỡng triage 22.3 px dựa trên 50 ảnh; các hằng số hình học của bộ tách ký tự cũng được chọn trên tune.
+  \item \textbf{Khuôn vị trí lệch nhẹ.} Khuôn 7 vị trí chuẩn lệch so với dãy ký tự thật khoảng 3 px (lớn nhất 5 px trên 5 biển kiểm tra), tuy chưa làm trượt vị trí.
+  \item \textbf{E8 chỉ định tính và trên bộ ảnh nhỏ.} E8 chỉ chạy trên 139 ảnh Kaggle (48 ảnh lấy bằng Brave chưa có bbox), kiểm tra bằng mắt và đếm hộp thô, không có độ đo; bộ ảnh không cân bằng (95 biển hai dòng, 61 biển xe máy) nên không ước lượng được chất lượng cho biển Việt Nam nói chung.
 \end{itemize}
 
 \section{Hướng cải thiện}
+\label{sec:future}
 
-Vì 21\% ảnh test không có ứng viên đúng trong top-5, ưu tiên là bổ sung khâu sinh ứng viên, ví dụ thêm nguồn ứng viên theo màu biển hoặc bù nghiêng trước bước morph (chưa thử). Ở khâu xếp hạng, có thể thêm mẫu âm khó (chữ hãng xe, logo) vào SVM và chia fold theo ảnh khi kiểm chứng. Ở khâu nắn, cần quad chính xác hơn vì sai số khoảng 16 px nhiều khả năng góp phần đáng kể vào lỗi (giả thuyết; 152/257 ảnh top-1 đúng nhưng lỗi tách đúng khi crop \code{gt}); và dùng IoU đa giác để đánh giá công bằng hơn với biển nghiêng. Lỗi dính ký tự Hán với chữ A thuộc phần tách ký tự và được nêu ở phần của B.
+Vì 21\% ảnh test không có ứng viên đúng trong top-5, ưu tiên là bổ sung khâu sinh ứng viên, ví dụ thêm nguồn ứng viên theo màu biển (gợi ý từ E1) hoặc bù nghiêng trước bước morph (chưa thử). Ở khâu xếp hạng, có thể thêm mẫu âm khó (chữ hãng xe, logo) vào SVM và chia fold theo ảnh khi kiểm chứng. Ở khâu nắn, cần quad chính xác hơn vì sai số khoảng 16 px nhiều khả năng góp phần đáng kể vào lỗi (giả thuyết; 152/257 ảnh top-1 đúng nhưng lỗi tách đúng khi crop \code{gt}); và dùng IoU đa giác để đánh giá công bằng hơn với biển nghiêng. Ở khâu tách ký tự, nên chuyển cấu hình mặc định sang projection và xử lý riêng lỗi ký tự Hán dính chữ ``A''. Để dùng cho biển Việt Nam, cần định vị riêng cho biển xe máy và nắn theo tỉ lệ hai dòng trước khi đánh giá bước tách.
